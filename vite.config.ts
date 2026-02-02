@@ -3,7 +3,12 @@ import react from '@vitejs/plugin-react';
 import { crx } from '@crxjs/vite-plugin';
 import path from 'path';
 import fs from 'fs';
-import manifest from './src/manifest.json' with { type: 'json' };
+import { loadEnv } from 'vite';
+
+// 读取 manifest.json
+const manifestPath = path.resolve(__dirname, 'src/manifest.json');
+const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+const manifest = JSON.parse(manifestContent);
 
 // 插件：处理 sidepanel.html 中的脚本引用
 function sidepanelPlugin(): Plugin {
@@ -14,9 +19,14 @@ function sidepanelPlugin(): Plugin {
       const sidepanelPath = path.resolve(__dirname, 'dist/src/sidepanel/sidepanel.html');
       if (fs.existsSync(sidepanelPath)) {
         let content = fs.readFileSync(sidepanelPath, 'utf-8');
-        // 将绝对路径替换为相对路径
-        content = content.replace(/src="\/sidepanel\.js"/g, 'src="./sidepanel.js"');
-        content = content.replace(/href="\/assets\//g, 'href="./assets/');
+        // 修复路径：sidepanel.html在dist/src/sidepanel/目录下
+        // 相对于该目录，sidepanel.js在../../，assets在../../assets/
+        // 处理绝对路径
+        content = content.replace(/src="\/sidepanel\.js"/g, 'src="../../sidepanel.js"');
+        content = content.replace(/href="\/assets\//g, 'href="../../assets/');
+        // 处理相对路径（如果存在）
+        content = content.replace(/src="\.\/sidepanel\.js"/g, 'src="../../sidepanel.js"');
+        content = content.replace(/href="\.\/assets\//g, 'href="../../assets/');
         fs.writeFileSync(sidepanelPath, content);
       }
     }
