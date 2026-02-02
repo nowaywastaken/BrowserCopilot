@@ -1,3 +1,353 @@
+/**
+ * Index CSS - Browser Pal
+ * Tailwind CSS 入口文件 + 自定义样式
+ * 
+ * 特性：
+ * - Tailwind基础样式
+ * - 自定义组件样式
+ * - 动画效果
+ * - 60fps流畅度优化
+ */
+
+/* ============================================================================
+   Tailwind CSS 基础
+   ============================================================================ */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================================================================
+   自定义组件样式
+   ============================================================================ */
+
+/* ========== 聊天消息气泡 ========== */
+
+@layer components {
+  /* 消息气泡基础样式 */
+  .message-bubble {
+    @apply relative px-4 py-2.5 rounded-2xl shadow-sm transition-all duration-200;
+  }
+
+  /* 用户消息气泡 */
+  .message-bubble-user {
+    @apply bg-blue-500 text-white rounded-br-sm;
+  }
+
+  /* AI消息气泡 */
+  .message-bubble-assistant {
+    @apply bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-bl-sm;
+  }
+
+  /* 系统消息气泡 */
+  .message-bubble-system {
+    @apply bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-amber-900 dark:text-amber-200;
+  }
+}
+
+/* ========== 输入区域 ========== */
+
+@layer components {
+  /* 输入框容器 */
+  .input-container {
+    @apply relative rounded-xl overflow-hidden transition-all duration-200;
+  }
+
+  /* 输入框基础样式 */
+  .input-field {
+    @apply w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border-0 rounded-xl resize-none;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500;
+    @apply placeholder:text-gray-400 dark:placeholder:text-gray-500;
+    @apply text-gray-900 dark:text-gray-100;
+    @apply min-h-[48px] max-h-[150px] leading-relaxed;
+  }
+
+  /* 发送按钮 */
+  .send-button {
+    @apply flex items-center justify-center w-10 h-10 rounded-xl;
+    @apply transition-all duration-200 hover:scale-105 active:scale-95;
+  }
+
+  .send-button-enabled {
+    @apply bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md hover:shadow-lg;
+  }
+
+  .send-button-disabled {
+    @apply bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed;
+  }
+}
+
+/* ========== 按钮样式 ========== */
+
+@layer components {
+  /* 基础按钮 */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg;
+    @apply font-medium transition-all duration-200;
+    @apply hover:scale-105 active:scale-95;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+
+  /* 主按钮 */
+  .btn-primary {
+    @apply btn bg-blue-500 hover:bg-blue-600 text-white focus:ring-blue-500;
+  }
+
+  /* 次按钮 */
+  .btn-secondary {
+    @apply btn bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 focus:ring-gray-500;
+  }
+
+  /* 危险按钮 */
+  .btn-danger {
+    @apply btn bg-red-500 hover:bg-red-600 text-white focus:ring-red-500;
+  }
+
+  /* 图标按钮 */
+  .btn-icon {
+    @apply p-2 rounded-lg transition-colors duration-150;
+    @apply hover:bg-gray-100 dark:hover:bg-gray-700;
+    @apply text-gray-600 dark:text-gray-300;
+  }
+
+  /* 渐变按钮 */
+  .btn-gradient {
+    @apply btn bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md hover:shadow-lg;
+  }
+}
+
+/* ========== 卡片样式 ========== */
+
+@layer components {
+  /* 基础卡片 */
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden;
+  }
+
+  /* 交互卡片 */
+  .card-interactive {
+    @apply card transition-all duration-200;
+    @apply hover:shadow-xl hover:-translate-y-0.5;
+  }
+
+  /* 透明卡片 */
+  .card-transparent {
+    @apply bg-transparent dark:bg-transparent shadow-none;
+  }
+}
+
+/* ========== 模态框样式 ========== */
+
+@layer components {
+  /* 模态框遮罩 */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50;
+    @apply animate-fade-in;
+  }
+
+  /* 模态框内容 */
+  .modal-content {
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-xl;
+    @apply animate-scale-in;
+  }
+
+  /* 模态框头部 */
+  .modal-header {
+    @apply flex items-center justify-between px-4 py-3;
+    @apply border-b border-gray-200 dark:border-gray-700;
+  }
+
+  /* 模态框主体 */
+  .modal-body {
+    @apply p-4 space-y-4;
+  }
+}
+
+/* ============================================================================
+   动画效果
+   ============================================================================ */
+
+@layer utilities {
+  /* 淡入 */
+  .animate-fade-in {
+    animation: fade-in 0.2s ease;
+  }
+
+  /* 滑入 */
+  .animate-slide-up {
+    animation: slide-up 0.2s ease;
+  }
+
+  .animate-slide-down {
+    animation: slide-down 0.2s ease;
+  }
+
+  /* 缩放 */
+  .animate-scale-in {
+    animation: scale-in 0.2s ease;
+  }
+
+  /* 脉冲 */
+  .animate-pulse-slow {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* 旋转 */
+  .animate-spin-slow {
+    animation: spin 1.5s linear infinite;
+  }
+
+  /* 打字机光标 */
+  .typewriter-cursor {
+    @apply inline-block w-0.5 h-1.5 bg-current ml-0.5;
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+}
+
+/* ============================================================================
+   Markdown 样式
+   ============================================================================ */
+
+@layer components {
+  /* Markdown容器 */
+  .markdown-content {
+    @apply prose prose-sm dark:prose-invert max-w-none leading-relaxed;
+  }
+
+  /* Markdown链接 */
+  .markdown-content a {
+    @apply text-blue-500 hover:text-blue-600 dark:text-blue-400;
+    @apply underline decoration-blue-300 dark:decoration-blue-700 underline-offset-2;
+  }
+
+  /* Markdown代码块 */
+  .markdown-content pre {
+    @apply my-3 p-3 bg-gray-900 rounded-lg overflow-x-auto;
+  }
+
+  .markdown-content code {
+    @apply text-sm font-mono;
+  }
+
+  .markdown-content :not(pre) > code {
+    @apply px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono;
+  }
+
+  /* Markdown引用 */
+  .markdown-content blockquote {
+    @apply my-3 pl-4 border-l-4 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 italic;
+  }
+
+  /* Markdown表格 */
+  .markdown-content table {
+    @apply w-full border-collapse my-3;
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    @apply px-3 py-2 border border-gray-200 dark:border-gray-600 text-left;
+  }
+
+  .markdown-content th {
+    @apply font-semibold bg-gray-100 dark:bg-gray-700;
+  }
+}
+
+/* ============================================================================
+   响应式设计
+   ============================================================================ */
+
+@layer utilities {
+  /* 隐藏滚动条但保持功能 */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 自定义滚动条 */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-gray-300, #d1d5db);
+    border-radius: 3px;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-gray-600, #4b5563);
+  }
+}
+
+/* ============================================================================
+   深色模式覆盖
+   ============================================================================ */
+
+.dark {
+  /* 代码块背景 */
+  .markdown-content pre {
+    @apply bg-gray-800;
+  }
+
+  /* 代码内联背景 */
+  .markdown-content :not(pre) > code {
+    @apply bg-gray-700;
+  }
+
+  /* 表格头部背景 */
+  .markdown-content th {
+    @apply bg-gray-700;
+  }
+}
+
+/* ============================================================================
+   高性能动画
+   ============================================================================ */
+
+/* 使用 transform 和 opacity 的动画，避免重排 */
+.gpu-animate {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+}
+
+/* 硬件加速 */
+.hardware-accelerated {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* 禁用动画的首选项 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-slide-down,
+  .animate-scale-in,
+  .animate-pulse-slow,
+  .animate-spin-slow,
+  .typewriter-cursor {
+    animation: none !important;
+  }
+}

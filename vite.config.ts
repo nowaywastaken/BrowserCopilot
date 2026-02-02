@@ -11,11 +11,12 @@ function sidepanelPlugin(): Plugin {
     name: 'sidepanel-handler',
     enforce: 'post',
     writeBundle() {
-      const sidepanelPath = path.resolve(__dirname, 'dist/sidepanel.html');
+      const sidepanelPath = path.resolve(__dirname, 'dist/src/sidepanel/sidepanel.html');
       if (fs.existsSync(sidepanelPath)) {
         let content = fs.readFileSync(sidepanelPath, 'utf-8');
-        // 确保脚本引用使用相对路径
-        content = content.replace(/src="[^"]*\/([^/"]+)\.js"/g, 'src="./$1.js"');
+        // 将绝对路径替换为相对路径
+        content = content.replace(/src="\/sidepanel\.js"/g, 'src="./sidepanel.js"');
+        content = content.replace(/href="\/assets\//g, 'href="./assets/');
         fs.writeFileSync(sidepanelPath, content);
       }
     }
@@ -60,7 +61,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    crx({ 
+    crx({
       manifest: manifest as any,
       contentScripts: {
         injectCss: true,
