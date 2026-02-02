@@ -1,0 +1,64 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript
+*.tsbuildinfo
+
+# Build outputs
+dist/
+dist-ssr/
+*.mjs.map
+*.js.map
+
+# Next.js build output
+.next/
+out/
+
+# Static generation output
+public/dist/
+# Note: In Vite projects, the build output is usually 'dist'
+
+# IDEs and Editors
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env.local
+
+# OS Metadata
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Testing
+coverage/
+.nyc_output
+
+# Optional: Turbo
+.turbo/
+
+# Optional: Tailwind CSS
+.pnp.*
+.yarn/
