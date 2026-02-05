@@ -1,5 +1,3 @@
-import type { ChatMessage } from './chat';
-
 /** 提供商 ID 类型 */
 export type ProviderId = 'openai' | 'anthropic' | 'openrouter';
 
