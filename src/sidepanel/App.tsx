@@ -1,12 +1,13 @@
 /**
  * Browser Pal - Main App Component
  * Chrome扩展侧边栏主界面
- * 
+ *
  * 特性：
  * - 流式渲染实现（FPS≥55性能优化）
+ * - 多提供商支持（OpenAI、Anthropic、OpenRouter）
  * - 模型切换功能
  * - 记忆系统集成（RAG上下文注入）
- * - 设置面板（API Key配置）
+ * - 设置面板（多提供商 API Key 配置）
  * - 深色模式支持
  * - 错误处理和加载状态
  * - 针对Apple Silicon优化（延迟<100ms）
@@ -30,21 +31,18 @@ import {
 } from 'lucide-react';
 import { ChatWindow } from './components/ChatWindow';
 import { Message } from './components/MessageBubble';
-import { ModelSelector, type AIModel } from './components/ModelSelector';
-import { OpenRouterClient, ChatMessage } from '../lib/openai';
+import { ModelSelector } from './components/ModelSelector';
+import { ProviderSelector } from './components/ProviderSelector';
+import { ChatService } from '../lib/services/chat-service';
+import { ProviderStore } from '../lib/storage/provider-store';
+import type { ProviderId } from '../lib/types/provider';
+import { getDefaultModel, PROVIDERS } from '../lib/providers';
 import { LocalMemoryManager } from '../lib/memory';
+import type { ChatMessage } from '../lib/openai';
 
 // ============================================================================
 // 类型定义
 // ============================================================================
-
-/** 存储键类型 */
-interface StorageKeys {
-  API_KEY: string;
-  MESSAGES: string;
-  DARK_MODE: string;
-  SELECTED_MODEL: string;
-}
 
 /** 错误信息 */
 interface ErrorInfo {
@@ -53,17 +51,16 @@ interface ErrorInfo {
   recoverable: boolean;
 }
 
+/** 提供商 API Keys 状态（用于设置面板） */
+interface ProviderApiKeysState {
+  openai: string;
+  anthropic: string;
+  openrouter: string;
+}
+
 // ============================================================================
 // 常量定义
 // ============================================================================
-
-/** 存储键 */
-const STORAGE_KEYS: StorageKeys = {
-  API_KEY: 'openrouter_api_key',
-  MESSAGES: 'chat_messages',
-  DARK_MODE: 'dark_mode',
-  SELECTED_MODEL: 'selected_model',
-};
 
 /** 默认系统提示 */
 const DEFAULT_SYSTEM_PROMPT = `你是 Browser Pal，一个智能浏览器助手。你的任务是：
@@ -74,14 +71,17 @@ const DEFAULT_SYSTEM_PROMPT = `你是 Browser Pal，一个智能浏览器助手�
 
 当前时间: {timestamp}`;
 
-/** 默认模型 */
-const DEFAULT_MODEL: AIModel = 'anthropic/claude-3-sonnet-20240229';
+/** 默认提供商（向后兼容） */
+const DEFAULT_PROVIDER: ProviderId = 'openrouter';
 
 /** 上下文消息数量限制 */
 const MAX_CONTEXT_MESSAGES = 10;
 
 /** 每次检索的记忆数量 */
 const MEMORY_RETRIEVAL_K = 3;
+
+/** 迁移完成标记 */
+const MIGRATION_COMPLETED_KEY = 'provider_migration_completed';
 
 // ============================================================================
 // Chrome API 声明
@@ -139,33 +139,41 @@ const isAppleSilicon = (): boolean => {
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  apiKey: string;
-  apiKeyInput: string;
-  selectedModel: AIModel;
+  selectedProvider: ProviderId;
+  selectedModel: string;
   memoryCount: number;
-  onApiKeyChange: (value: string) => void;
-  onSaveApiKey: () => void;
-  onModelChange: (model: AIModel) => void;
+  providerApiKeys: ProviderApiKeysState;
+  onProviderApiKeyChange: (providerId: keyof ProviderApiKeysState, value: string) => void;
+  onSaveProviderKey: (providerId: keyof ProviderApiKeysState) => void;
+  onClearProviderKey: (providerId: keyof ProviderApiKeysState) => void;
+  onModelChange: (modelId: string) => void;
   onClearData: () => void;
-  onClearApiKey: () => void;
   isAppleSilicon: boolean;
+  configuredProviders: ProviderId[];
 }
 
 const SettingsModal = React.memo(function SettingsModal({
   isOpen,
   onClose,
-  apiKey,
-  apiKeyInput,
+  selectedProvider,
   selectedModel,
   memoryCount,
-  onApiKeyChange,
-  onSaveApiKey,
+  providerApiKeys,
+  onProviderApiKeyChange,
+  onSaveProviderKey,
+  onClearProviderKey,
   onModelChange,
   onClearData,
-  onClearApiKey,
   isAppleSilicon: isAS,
+  configuredProviders,
 }: SettingsModalProps) {
   if (!isOpen) return null;
+
+  const providerConfigs = [
+    { id: 'openai' as const, name: 'OpenAI', keyUrl: 'https://platform.openai.com/api-keys' },
+    { id: 'anthropic' as const, name: 'Anthropic', keyUrl: 'https://console.anthropic.com/' },
+    { id: 'openrouter' as const, name: 'OpenRouter', keyUrl: 'https://openrouter.ai/keys' },
+  ];
 
   return (
     <div
@@ -191,55 +199,62 @@ const SettingsModal = React.memo(function SettingsModal({
 
         {/* 模态框内容 */}
         <div className="p-4 space-y-6 max-h-[60vh] overflow-y-auto">
-          {/* API Key 配置 */}
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              <Key className="w-4 h-4" />
-              OpenRouter API Key
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={apiKeyInput}
-                onChange={(e) => onApiKeyChange(e.target.value)}
-                placeholder="sk-..."
-                className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder:text-gray-400"
-              />
-              <button
-                onClick={onSaveApiKey}
-                disabled={!apiKeyInput.trim()}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2 font-medium"
-              >
-                <Check className="w-4 h-4" />
-                保存
-              </button>
+          {/* 当前使用情况 */}
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300 font-medium mb-1">
+              <Zap className="w-4 h-4" />
+              <span>当前使用</span>
             </div>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              从 <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">openrouter.ai</a> 获取 API Key
+            <p className="text-xs text-blue-600 dark:text-blue-400">
+              提供商: {PROVIDERS[selectedProvider].name} | 模型: {selectedModel}
             </p>
           </div>
 
-          {/* API Key 状态 */}
-          <div className="flex items-center gap-2 text-sm">
-            {apiKey ? (
-              <>
-                <Check className="w-4 h-4 text-green-500" />
-                <span className="text-green-600 dark:text-green-400">API Key 已设置</span>
-                <button
-                  onClick={onClearApiKey}
-                  className="ml-auto text-red-500 hover:text-red-600 flex items-center gap-1"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  清除
-                </button>
-              </>
-            ) : (
-              <>
-                <AlertCircle className="w-4 h-4 text-amber-500" />
-                <span className="text-amber-600 dark:text-amber-400">请设置 API Key 以开始对话</span>
-              </>
-            )}
-          </div>
+          {/* API Key 配置 - 多提供商 */}
+          {providerConfigs.map(({ id, name, keyUrl }) => {
+            const apiKey = providerApiKeys[id];
+            const isConfigured = configuredProviders.includes(id);
+
+            return (
+              <div key={id}>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <Key className="w-4 h-4" />
+                  {name} API Key
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => onProviderApiKeyChange(id, e.target.value)}
+                    placeholder="sk-..."
+                    className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder:text-gray-400"
+                  />
+                  <button
+                    onClick={() => onSaveProviderKey(id)}
+                    disabled={!apiKey.trim()}
+                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-2 font-medium"
+                  >
+                    <Check className="w-4 h-4" />
+                    保存
+                  </button>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    从 <a href={keyUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{keyUrl}</a> 获取
+                  </p>
+                  {isConfigured && (
+                    <button
+                      onClick={() => onClearProviderKey(id)}
+                      className="text-red-500 hover:text-red-600 flex items-center gap-1 text-xs"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      清除
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
 
           {/* 模型选择 */}
           <div>
@@ -248,6 +263,7 @@ const SettingsModal = React.memo(function SettingsModal({
               选择模型
             </label>
             <ModelSelector
+              providerId={selectedProvider}
               value={selectedModel}
               onChange={onModelChange}
             />
@@ -350,15 +366,22 @@ const ErrorBanner = React.memo(function ErrorBanner({
 
 function App() {
   // ========== State ==========
-  const [apiKey, setApiKey] = useState('');
-  const [apiKeyInput, setApiKeyInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<AIModel>(DEFAULT_MODEL);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>(DEFAULT_PROVIDER);
+  const [selectedModel, setSelectedModel] = useState<string>(getDefaultModel(DEFAULT_PROVIDER));
+  const [configuredProviders, setConfiguredProviders] = useState<ProviderId[]>([]);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [memoryCount, setMemoryCount] = useState(0);
+
+  // 设置面板中的 API Keys 状态
+  const [providerApiKeys, setProviderApiKeys] = useState<ProviderApiKeysState>({
+    openai: '',
+    anthropic: '',
+    openrouter: '',
+  });
 
   // ========== Refs ==========
   const memoryManagerRef = useRef<LocalMemoryManager | null>(null);
@@ -370,7 +393,7 @@ function App() {
   // 保存消息到存储
   const saveMessages = useCallback(async (msgs: Message[]) => {
     try {
-      await chrome.storage.local.set({ [STORAGE_KEYS.MESSAGES]: msgs });
+      await chrome.storage.local.set({ chat_messages: msgs });
     } catch (err) {
       console.error('Failed to save messages:', err);
     }
@@ -385,14 +408,19 @@ function App() {
     }
   }, []);
 
+  // 获取当前提供商的 API Key
+  const getCurrentApiKey = useCallback(async (): Promise<string | undefined> => {
+    return await ProviderStore.getApiKey(selectedProvider);
+  }, [selectedProvider]);
+
   // ========== Effects ==========
 
   // 初始化深色模式
   useEffect(() => {
     const initDarkMode = async () => {
       try {
-        const stored = await chrome.storage.local.get(STORAGE_KEYS.DARK_MODE);
-        const savedDarkMode = stored[STORAGE_KEYS.DARK_MODE] === 'true';
+        const stored = await chrome.storage.local.get('dark_mode');
+        const savedDarkMode = stored.dark_mode === 'true';
         setDarkMode(savedDarkMode);
         if (savedDarkMode) {
           document.documentElement.classList.add('dark');
@@ -404,30 +432,82 @@ function App() {
     initDarkMode();
   }, []);
 
-  // 加载API Key
+  // Task 10: 加载提供商配置
   useEffect(() => {
-    const loadApiKey = async () => {
+    const loadProviderConfig = async () => {
       try {
-        const stored = await chrome.storage.local.get(STORAGE_KEYS.API_KEY);
-        if (stored[STORAGE_KEYS.API_KEY]) {
-          const key = stored[STORAGE_KEYS.API_KEY] as string;
-          setApiKey(key);
-          setApiKeyInput(key);
-        }
+        // 加载选中的提供商
+        const provider = await ProviderStore.getSelectedProvider();
+        setSelectedProvider(provider);
+
+        // 加载选中的模型
+        const model = await ProviderStore.getSelectedModel();
+        setSelectedModel(model);
+
+        // 加载所有 API Keys 并确定已配置的提供商
+        const apiKeys = await ProviderStore.getApiKeys();
+        const configured = Object.keys(apiKeys).filter(
+          (key): key is ProviderId => {
+            const keyValue = apiKeys[key as ProviderId];
+            return (keyValue?.trim().length ?? 0) > 0;
+          }
+        );
+        setConfiguredProviders(configured);
       } catch (err) {
-        console.error('Failed to load API key:', err);
+        console.error('Failed to load provider config:', err);
       }
     };
-    loadApiKey();
+    loadProviderConfig();
+  }, []);
+
+  // Task 16: 迁移现有 OpenRouter 配置
+  useEffect(() => {
+    const migrateOpenRouterConfig = async () => {
+      try {
+        // 检查是否已完成迁移
+        const migrationResult = await chrome.storage.local.get(MIGRATION_COMPLETED_KEY);
+        if (migrationResult[MIGRATION_COMPLETED_KEY]) {
+          return; // 已迁移，跳过
+        }
+
+        // 检查是否有旧的 OpenRouter API Key
+        const oldResult = await chrome.storage.local.get('openrouter_api_key');
+        const oldApiKey = oldResult['openrouter_api_key'] as string | undefined;
+
+        if (oldApiKey && typeof oldApiKey === 'string') {
+          // 迁移到新结构
+          await ProviderStore.setApiKey('openrouter', oldApiKey);
+
+          // 设置选中的提供商和模型
+          await ProviderStore.setSelectedProvider('openrouter');
+          const existingModel = await chrome.storage.local.get('selected_model');
+          const modelValue = existingModel.selected_model;
+          if (modelValue && typeof modelValue === 'string') {
+            await ProviderStore.setSelectedModel(modelValue);
+          }
+
+          // 删除旧键
+          await chrome.storage.local.remove('openrouter_api_key');
+
+          // 标记迁移完成
+          await chrome.storage.local.set({ [MIGRATION_COMPLETED_KEY]: true });
+
+          console.log('OpenRouter config migrated successfully');
+        }
+      } catch (err) {
+        console.error('Failed to migrate OpenRouter config:', err);
+      }
+    };
+    migrateOpenRouterConfig();
   }, []);
 
   // 加载消息
   useEffect(() => {
     const loadMessages = async () => {
       try {
-        const stored = await chrome.storage.local.get(STORAGE_KEYS.MESSAGES);
-        if (stored[STORAGE_KEYS.MESSAGES]) {
-          const msgs = stored[STORAGE_KEYS.MESSAGES] as Message[];
+        const stored = await chrome.storage.local.get('chat_messages');
+        if (stored.chat_messages) {
+          const msgs = stored.chat_messages as Message[];
           setMessages(msgs);
         }
       } catch (err) {
@@ -437,24 +517,10 @@ function App() {
     loadMessages();
   }, []);
 
-  // 加载选中的模型
-  useEffect(() => {
-    const loadSelectedModel = async () => {
-      try {
-        const stored = await chrome.storage.local.get(STORAGE_KEYS.SELECTED_MODEL);
-        if (stored[STORAGE_KEYS.SELECTED_MODEL]) {
-          setSelectedModel(stored[STORAGE_KEYS.SELECTED_MODEL] as AIModel);
-        }
-      } catch (err) {
-        console.error('Failed to load selected model:', err);
-      }
-    };
-    loadSelectedModel();
-  }, []);
-
   // 初始化记忆系统
   useEffect(() => {
     const initMemory = async () => {
+      const apiKey = await getCurrentApiKey();
       if (!apiKey) return;
 
       try {
@@ -476,7 +542,26 @@ function App() {
     };
 
     initMemory();
-  }, [apiKey]);
+  }, [selectedProvider, getCurrentApiKey]);
+
+  // 当设置面板打开时，加载 API Keys
+  useEffect(() => {
+    const loadApiKeysForSettings = async () => {
+      if (!showSettings) return;
+
+      try {
+        const apiKeys = await ProviderStore.getApiKeys();
+        setProviderApiKeys({
+          openai: apiKeys.openai || '',
+          anthropic: apiKeys.anthropic || '',
+          openrouter: apiKeys.openrouter || '',
+        });
+      } catch (err) {
+        console.error('Failed to load API keys for settings:', err);
+      }
+    };
+    loadApiKeysForSettings();
+  }, [showSettings]);
 
   // ========== 处理函数 ==========
 
@@ -484,7 +569,7 @@ function App() {
   const toggleDarkMode = useCallback(() => {
     const newDarkMode = !darkMode;
     setDarkMode(newDarkMode);
-    saveSettings(STORAGE_KEYS.DARK_MODE, String(newDarkMode));
+    saveSettings('dark_mode', String(newDarkMode));
     if (newDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -492,40 +577,83 @@ function App() {
     }
   }, [darkMode, saveSettings]);
 
-  // 保存API Key
-  const handleSaveApiKey = useCallback(async () => {
-    if (apiKeyInput.trim()) {
-      await saveSettings(STORAGE_KEYS.API_KEY, apiKeyInput.trim());
-      setApiKey(apiKeyInput.trim());
-      setShowSettings(false);
+  // Task 11: 处理提供商切换
+  const handleProviderChange = useCallback(async (providerId: ProviderId) => {
+    // 检查提供商是否已配置
+    if (!configuredProviders.includes(providerId)) {
+      setError({
+        message: `请先在设置中配置 ${PROVIDERS[providerId].name} 的 API Key`,
+        timestamp: Date.now(),
+        recoverable: true,
+      });
+      setShowSettings(true);
+      return;
+    }
 
-      // 重新初始化记忆系统
+    // 切换提供商
+    setSelectedProvider(providerId);
+    await ProviderStore.setSelectedProvider(providerId);
+
+    // 设置默认模型
+    const defaultModel = getDefaultModel(providerId);
+    setSelectedModel(defaultModel);
+    await ProviderStore.setSelectedModel(defaultModel);
+  }, [configuredProviders]);
+
+  // 处理模型变更
+  const handleModelChange = useCallback(async (modelId: string) => {
+    setSelectedModel(modelId);
+    await ProviderStore.setSelectedModel(modelId);
+  }, []);
+
+  // Task 14: 保存提供商 API Key
+  const handleSaveProviderKey = useCallback(async (providerId: keyof ProviderApiKeysState) => {
+    const apiKey = providerApiKeys[providerId].trim();
+    if (!apiKey) return;
+
+    await ProviderStore.setApiKey(providerId as ProviderId, apiKey);
+
+    // 更新已配置提供商列表
+    if (!configuredProviders.includes(providerId as ProviderId)) {
+      setConfiguredProviders([...configuredProviders, providerId as ProviderId]);
+    }
+
+    // 清空输入框
+    setProviderApiKeys(prev => ({ ...prev, [providerId]: '' }));
+
+    // 如果当前没有选中的提供商，或者刚刚配置的是当前提供商，重新初始化记忆系统
+    if (providerId === selectedProvider) {
       if (memoryManagerRef.current) {
         memoryManagerRef.current = new LocalMemoryManager({
-          apiKey: apiKeyInput.trim(),
+          apiKey,
           similarityK: 4,
           maxMemories: 100,
         });
         await memoryManagerRef.current.init();
       }
     }
-  }, [apiKeyInput, saveSettings]);
+  }, [providerApiKeys, configuredProviders, selectedProvider]);
 
-  // 清除API Key
-  const handleClearApiKey = useCallback(async () => {
-    await chrome.storage.local.remove(STORAGE_KEYS.API_KEY);
-    setApiKey('');
-    setApiKeyInput('');
-    memoryManagerRef.current = null;
-    setMemoryCount(0);
-  }, []);
+  // Task 14: 清除提供商 API Key
+  const handleClearProviderKey = useCallback(async (providerId: keyof ProviderApiKeysState) => {
+    await ProviderStore.removeApiKey(providerId as ProviderId);
+
+    // 更新已配置提供商列表
+    setConfiguredProviders(prev => prev.filter(p => p !== providerId));
+
+    // 如果清除的是当前提供商的 key，清空记忆系统
+    if (providerId === selectedProvider) {
+      memoryManagerRef.current = null;
+      setMemoryCount(0);
+    }
+  }, [selectedProvider]);
 
   // 清除所有数据
   const handleClearData = useCallback(async () => {
     if (confirm('确定要清除所有聊天记录和记忆吗？此操作不可恢复。')) {
       setMessages([]);
       saveMessages([]);
-      await chrome.storage.local.remove(STORAGE_KEYS.MESSAGES);
+      await chrome.storage.local.remove('chat_messages');
 
       if (memoryManagerRef.current) {
         await memoryManagerRef.current.clear();
@@ -534,11 +662,12 @@ function App() {
     }
   }, [saveMessages]);
 
-  // 发送消息
+  // Task 12: 发送消息 - 使用 ChatService
   const handleSend = useCallback(async (content: string) => {
+    const apiKey = await getCurrentApiKey();
     if (!apiKey) {
       setError({
-        message: '请先设置 OpenRouter API Key',
+        message: `请先在设置中配置 ${PROVIDERS[selectedProvider].name} 的 API Key`,
         timestamp: Date.now(),
         recoverable: true,
       });
@@ -601,9 +730,6 @@ function App() {
     // 创建AbortController
     abortControllerRef.current = new AbortController();
 
-    // 创建客户端
-    const client = new OpenRouterClient({ apiKey });
-
     try {
       const assistantMessageId = generateId();
       let assistantContent = '';
@@ -622,23 +748,20 @@ function App() {
         return newMessages;
       });
 
-      // 流式响应
-      for await (const chunk of client.streamChat(apiMessages)) {
-        if (abortControllerRef.current?.signal.aborted) {
-          break;
-        }
-
-        const delta = chunk.choices[0]?.delta?.content;
-        if (delta) {
-          assistantContent += delta;
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMessageId
-                ? { ...msg, content: assistantContent }
-                : msg
-            )
-          );
-        }
+      // 使用 ChatService 进行流式响应
+      for await (const chunk of ChatService.streamChat(apiMessages, {
+        providerId: selectedProvider,
+        model: selectedModel,
+        signal: abortControllerRef.current.signal,
+      })) {
+        assistantContent += chunk;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: assistantContent }
+              : msg
+          )
+        );
       }
 
       // 保存到记忆
@@ -681,7 +804,7 @@ function App() {
       setLoading(false);
       abortControllerRef.current = null;
     }
-  }, [apiKey, messages, saveMessages]);
+  }, [selectedProvider, selectedModel, messages, saveMessages, getCurrentApiKey]);
 
   // 停止生成
   const handleStop = useCallback(() => {
@@ -720,17 +843,27 @@ function App() {
               <span className="text-white font-bold text-sm">BP</span>
             </div>
 
-            {/* 标题和模型 */}
+            {/* 标题、提供商选择器和模型选择器 */}
             <div className="flex items-center gap-3">
               <h1 className="text-lg font-semibold text-gray-800 dark:text-white">
                 Browser Pal
               </h1>
 
+              {/* Task 13: 提供商选择器 */}
+              <div className="hidden sm:block">
+                <ProviderSelector
+                  value={selectedProvider}
+                  onChange={handleProviderChange}
+                  configuredProviders={configuredProviders}
+                />
+              </div>
+
               {/* 模型选择器 */}
               <div className="hidden sm:block">
                 <ModelSelector
+                  providerId={selectedProvider}
                   value={selectedModel}
-                  onChange={setSelectedModel}
+                  onChange={handleModelChange}
                 />
               </div>
             </div>
@@ -791,25 +924,28 @@ function App() {
             onSend={handleSend}
             onStop={handleStop}
             loading={loading}
-            disabled={!apiKey}
+            disabled={!configuredProviders.includes(selectedProvider)}
           />
         </div>
       </div>
 
-      {/* 设置模态框 */}
+      {/* Task 14 & 15: 设置模态框 - 多提供商配置和当前使用显示 */}
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
-        apiKey={apiKey}
-        apiKeyInput={apiKeyInput}
+        selectedProvider={selectedProvider}
         selectedModel={selectedModel}
         memoryCount={memoryCount}
-        onApiKeyChange={setApiKeyInput}
-        onSaveApiKey={handleSaveApiKey}
-        onModelChange={setSelectedModel}
+        providerApiKeys={providerApiKeys}
+        onProviderApiKeyChange={(providerId, value) => {
+          setProviderApiKeys(prev => ({ ...prev, [providerId]: value }));
+        }}
+        onSaveProviderKey={handleSaveProviderKey}
+        onClearProviderKey={handleClearProviderKey}
+        onModelChange={handleModelChange}
         onClearData={handleClearData}
-        onClearApiKey={handleClearApiKey}
         isAppleSilicon={isAppleSiliconRef.current}
+        configuredProviders={configuredProviders}
       />
     </div>
   );
