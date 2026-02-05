@@ -3,6 +3,9 @@
  * 支持 GPT-4 / Claude 3 / Llama 3 多模型切换
  * 实现 SSE 流式响应、错误处理、重试机制和缓存
  *
+ * @deprecated 此文件已废弃。请使用 src/lib/services/chat-service.ts 代替。
+ * 新的多提供商架构支持 OpenAI、Anthropic 和 OpenRouter。
+ *
  * 特性：
  * - 完整的 AbortController 支持，支持请求取消
  * - Stream Reader 自动取消，防止内存泄漏
