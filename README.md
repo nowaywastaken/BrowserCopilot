@@ -6,11 +6,11 @@
 
 ### 🎯 核心功能
 - **原生 Chrome SidePanel API** - 集成 Chrome 原生侧边栏，独立渲染，样式零泄漏
-- **OpenRouter 统一 AI 接入** - 支持 GPT-4、Claude 3、Llama 3、Gemini 等多种模型
+- **多提供商 AI 接入** - 支持 OpenAI、Anthropic、OpenRouter 等多种 AI 提供商
+- **多模型切换** - 支持 GPT-4、Claude 3.5 Sonnet、Llama 3、Gemini 等多种模型，随时切换适应不同场景需求
 - **SSE 流式响应** - 实时流式聊天体验，响应无卡顿
 - **本地记忆系统** - 基于 LangChain.js + IndexedDB 的向量检索与 RAG 上下文注入
 - **全局快捷键** - `Cmd/Ctrl+Shift+L` 快速打开/关闭侧边栏
-- **多模型切换** - 随时切换不同 AI 模型，适应不同场景需求
 
 ### ⚡ 性能优化
 - **Apple Silicon 优化** - 针对 M 系列芯片优化，延迟 <100ms
@@ -78,12 +78,21 @@ browser-pal/
 │   │   ├── App.tsx          # 主应用组件
 │   │   ├── main.tsx         # React 入口点
 │   │   ├── components/       # UI 组件
+│   │   │   ├── ProviderSelector.tsx  # 提供商选择器
+│   │   │   └── ModelSelector.tsx     # 模型选择器
 │   │   ├── globals.css      # 全局样式
 │   │   └── index.css        # Tailwind 样式
 │   ├── lib/                 # 核心库
-│   │   ├── openai.ts        # OpenRouter 客户端
-│   │   ├── memory.ts        # 记忆系统
-│   │   └── storage.ts      # 统一存储接口
+│   │   ├── providers/       # AI 提供商集成
+│   │   │   ├── index.ts     # 提供商工厂
+│   │   │   └── config.ts    # 提供商配置
+│   │   ├── storage/         # 存储层
+│   │   │   └── provider-store.ts  # 提供商存储
+│   │   ├── services/        # 业务服务
+│   │   │   └── chat-service.ts    # 聊天服务
+│   │   ├── types/           # 类型定义
+│   │   ├── openai.ts        # OpenRouter 客户端 (已废弃)
+│   │   └── memory.ts        # 记忆系统
 │   └── manifest.json        # Chrome 扩展清单
 ├── icons/                   # 扩展图标
 ├── public/                  # 静态资源
@@ -92,6 +101,33 @@ browser-pal/
 ```
 
 ## 🔧 配置
+
+### API Key 配置
+
+本扩展支持多个 AI 提供商，你可以在扩展的设置面板中配置相应的 API Key：
+
+1. **OpenAI**
+   - 获取 API Key: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+   - 支持模型: GPT-4o、GPT-4o Mini、o1-preview、o1-mini
+
+2. **Anthropic**
+   - 获取 API Key: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
+   - 支持模型: Claude 3.5 Sonnet、Claude 3 Opus、Claude 3 Haiku
+
+3. **OpenRouter** (默认)
+   - 获取 API Key: [openrouter.ai/keys](https://openrouter.ai/keys)
+   - 支持模型: 通过 OpenRouter 访问多种模型，包括 Claude 3.5、GPT-4o、Llama 3 70B、Gemini Pro 1.5
+
+配置步骤：
+1. 点击侧边栏设置图标（齿轮）
+2. 选择"提供商配置"标签
+3. 为每个提供商输入对应的 API Key
+4. 点击保存按钮
+
+切换提供商和模型：
+1. 在侧边栏顶部点击提供商选择器
+2. 选择已配置的提供商
+3. 在模型选择器中选择具体模型
 
 ### Manifest V3 配置
 - `manifest_version: 3`
