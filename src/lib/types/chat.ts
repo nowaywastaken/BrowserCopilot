@@ -1,26 +1,18 @@
-/** 聊天消息角色 */
-export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
+/**
+ * 聊天相关类型
+ *
+ * 注意：部分类型（MessageRole, ChatMessage, ToolCall, ToolDefinition）
+ * 在现有代码库中已定义于 src/lib/openai.ts
+ * 此文件提供统一导出，用于 Vercel AI SDK 集成
+ */
 
-/** 工具调用 */
-export interface ToolCall {
-  id: string;
-  type: 'function';
-  function: {
-    name: string;
-    arguments: string;
-  };
-}
+// 导入现有类型
+import type { MessageRole, ChatMessage, ToolCall, ToolDefinition } from '../openai';
 
-/** 聊天消息 - 兼容现有 OpenRouter 客户端和 Vercel AI SDK */
-export interface ChatMessage {
-  role: MessageRole;
-  content: string;
-  name?: string;
-  tool_calls?: ToolCall[];
-  tool_call_id?: string;
-}
+// 重新导出以提供统一访问点
+export type { MessageRole, ChatMessage, ToolCall, ToolDefinition };
 
-/** 聊天选项 */
+/** 聊天选项 - 扩展自现有 RequestConfig */
 export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
@@ -30,18 +22,4 @@ export interface ChatOptions {
   signal?: AbortSignal;
   tools?: ToolDefinition[];
   toolChoice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
-}
-
-/** 工具定义 */
-export interface ToolDefinition {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: {
-      type: 'object';
-      properties: Record<string, unknown>;
-      required?: string[];
-    };
-  };
 }

@@ -1,8 +1,12 @@
+/**
+ * 提供商相关类型
+ */
+
 /** 提供商 ID 类型 */
 export type ProviderId = 'openai' | 'anthropic' | 'openrouter';
 
 /** AI 模型信息 */
-export interface AIModelInfo {
+export interface AIModel {
   id: string;
   name: string;
   provider: ProviderId;
@@ -14,11 +18,15 @@ export interface ProviderConfig {
   id: ProviderId;
   name: string;
   baseURL?: string;
-  models: AIModelInfo[];
+  models: AIModel[];
 }
 
-/** 提供商 API Key 存储 - 使用映射类型确保类型安全 */
-export type ProviderApiKeys = Partial<Record<ProviderId, string>>;
+/** 提供商 API Key 存储 */
+export interface ProviderApiKeys {
+  openai?: string;
+  anthropic?: string;
+  openrouter?: string;
+}
 
 /** 存储键常量 */
 export const STORAGE_KEYS = {
