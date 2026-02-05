@@ -1,4 +1,3 @@
-import React from 'react';
 import { clsx } from 'clsx';
 import type { ProviderId } from '../../lib/types/provider';
 import { getProviderModels } from '../../lib/providers';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PROVIDERS, getProviderConfig, getAllProviders, getProviderModels, isValidProvider, isValidModel } from './config';
+import { PROVIDERS, getProviderConfig, isValidProvider, isValidModel } from './config';
 
 describe('Provider Config', () => {
   describe('PROVIDERS', () => {

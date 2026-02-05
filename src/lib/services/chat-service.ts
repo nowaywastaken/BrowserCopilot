@@ -1,7 +1,7 @@
 import { streamText, generateText } from 'ai';
 import type { ChatMessage, ChatOptions } from '../types/chat';
 import type { ProviderId } from '../types/provider';
-import { createProviderInstance, getDefaultModel } from '../providers';
+import { createProviderInstance } from '../providers';
 import { ProviderStore } from '../storage/provider-store';
 
 export class ChatService {
@@ -21,11 +21,11 @@ export class ChatService {
 
     const result = streamText({
       model: provider(model),
-      messages,
+      messages: messages as any, // Cast to AI SDK's CoreMessage type
       temperature: options.temperature,
       maxTokens: options.maxTokens,
       abortSignal: options.signal,
-    });
+    } as any);
 
     for await (const chunk of result.textStream) {
       yield chunk;
@@ -48,11 +48,11 @@ export class ChatService {
 
     const result = await generateText({
       model: provider(model),
-      messages,
+      messages: messages as any, // Cast to AI SDK's CoreMessage type
       temperature: options.temperature,
       maxTokens: options.maxTokens,
       abortSignal: options.signal,
-    });
+    } as any);
 
     return result.text;
   }
