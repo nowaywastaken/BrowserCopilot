@@ -5,6 +5,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ChatMessage, ChatOptions } from '../../../src/lib/types/chat';
+import type { AgentState } from '../../../src/lib/agent/agent-state';
+import type { IntentResult } from '../../../src/lib/agent/intent-detector';
+import type { AgentTaskPayload, AgentStateUpdateMessage } from '../../../src/lib/services/chat-service';
 
 describe('ChatService', () => {
   beforeEach(() => {
@@ -237,6 +240,318 @@ describe('ChatService', () => {
       expect(typeof ChatService.stopAgent).toBe('function');
       expect(typeof ChatService.getAgentState).toBe('function');
       expect(typeof ChatService.runAgent).toBe('function');
+    });
+  });
+});
+
+// ============================================================================
+// Chat Message Type Tests
+// ============================================================================
+
+describe('ChatMessage Type', () => {
+  describe('message structure', () => {
+    it('should accept user message', () => {
+      const message: ChatMessage = {
+        role: 'user',
+        content: 'Hello, world!',
+      };
+
+      expect(message.role).toBe('user');
+      expect(message.content).toBe('Hello, world!');
+    });
+
+    it('should accept system message', () => {
+      const message: ChatMessage = {
+        role: 'system',
+        content: 'You are a helpful assistant.',
+      };
+
+      expect(message.role).toBe('system');
+      expect(message.content).toBe('You are a helpful assistant.');
+    });
+
+    it('should accept assistant message', () => {
+      const message: ChatMessage = {
+        role: 'assistant',
+        content: 'I can help you with that.',
+      };
+
+      expect(message.role).toBe('assistant');
+    });
+
+    it('should accept message with mixed content', () => {
+      const message: ChatMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Look at this:' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+        ],
+      };
+
+      expect(message.role).toBe('user');
+      expect(Array.isArray(message.content)).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// ChatOptions Type Tests
+// ============================================================================
+
+describe('ChatOptions Type', () => {
+  describe('option structure', () => {
+    it('should accept temperature option', () => {
+      const options: ChatOptions = {
+        temperature: 0.7,
+      };
+
+      expect(options.temperature).toBe(0.7);
+    });
+
+    it('should accept maxTokens option', () => {
+      const options: ChatOptions = {
+        maxTokens: 1000,
+      };
+
+      expect(options.maxTokens).toBe(1000);
+    });
+
+    it('should accept signal option', () => {
+      const abortController = new AbortController();
+      const options: ChatOptions = {
+        signal: abortController.signal,
+      };
+
+      expect(options.signal).toBe(abortController.signal);
+    });
+
+    it('should accept all options together', () => {
+      const abortController = new AbortController();
+      const options: ChatOptions = {
+        temperature: 0.5,
+        maxTokens: 500,
+        signal: abortController.signal,
+      };
+
+      expect(options.temperature).toBe(0.5);
+      expect(options.maxTokens).toBe(500);
+      expect(options.signal).toBe(abortController.signal);
+    });
+  });
+});
+
+// ============================================================================
+// IntentResult Type Tests
+// ============================================================================
+
+describe('IntentResult Type', () => {
+  describe('result structure', () => {
+    it('should define screenshot intent result', () => {
+      const result: IntentResult = {
+        requiresAgent: true,
+        taskType: 'screenshot',
+        confidence: 'high',
+        reasoning: 'User wants to take a screenshot',
+      };
+
+      expect(result.requiresAgent).toBe(true);
+      expect(result.taskType).toBe('screenshot');
+      expect(result.confidence).toBe('high');
+    });
+
+    it('should define script intent result', () => {
+      const result: IntentResult = {
+        requiresAgent: true,
+        taskType: 'script',
+        confidence: 'high',
+        reasoning: 'User wants to create a script',
+      };
+
+      expect(result.taskType).toBe('script');
+    });
+
+    it('should define chat intent result', () => {
+      const result: IntentResult = {
+        requiresAgent: false,
+        taskType: 'chat',
+        confidence: 'high',
+        reasoning: 'User is asking a question',
+      };
+
+      expect(result.requiresAgent).toBe(false);
+      expect(result.taskType).toBe('chat');
+    });
+
+    it('should define mixed intent result', () => {
+      const result: IntentResult = {
+        requiresAgent: true,
+        taskType: 'mixed',
+        confidence: 'medium',
+        reasoning: 'Multiple intents detected',
+      };
+
+      expect(result.taskType).toBe('mixed');
+    });
+
+    it('should define page-interaction intent result', () => {
+      const result: IntentResult = {
+        requiresAgent: true,
+        taskType: 'page-interaction',
+        confidence: 'high',
+      };
+
+      expect(result.taskType).toBe('page-interaction');
+    });
+
+    it('should define dom intent result', () => {
+      const result: IntentResult = {
+        requiresAgent: true,
+        taskType: 'dom',
+        confidence: 'high',
+      };
+
+      expect(result.taskType).toBe('dom');
+    });
+
+    it('should allow optional reasoning', () => {
+      const result: IntentResult = {
+        requiresAgent: true,
+        taskType: 'screenshot',
+        confidence: 'high',
+      };
+
+      expect(result.reasoning).toBeUndefined();
+    });
+
+    it('should support all confidence levels', () => {
+      const highResult: IntentResult = {
+        requiresAgent: true,
+        taskType: 'screenshot',
+        confidence: 'high',
+      };
+
+      const mediumResult: IntentResult = {
+        requiresAgent: true,
+        taskType: 'screenshot',
+        confidence: 'medium',
+      };
+
+      const lowResult: IntentResult = {
+        requiresAgent: true,
+        taskType: 'screenshot',
+        confidence: 'low',
+      };
+
+      expect(highResult.confidence).toBe('high');
+      expect(mediumResult.confidence).toBe('medium');
+      expect(lowResult.confidence).toBe('low');
+    });
+  });
+});
+
+// ============================================================================
+// Agent Task Payload Type Tests
+// ============================================================================
+
+describe('AgentTaskPayload Type', () => {
+  describe('payload structure', () => {
+    it('should define basic task payload', () => {
+      const payload = {
+        task: 'Take a screenshot of the page',
+      };
+
+      expect(payload.task).toBe('Take a screenshot of the page');
+    });
+
+    it('should accept payload with tabId', () => {
+      const payload: AgentTaskPayload = {
+        task: 'Navigate to example.com',
+        tabId: 123,
+      };
+
+      expect(payload.tabId).toBe(123);
+    });
+
+    it('should accept payload with options', () => {
+      const payload: AgentTaskPayload = {
+        task: 'Click the button',
+        tabId: 456,
+        options: {
+          maxIterations: 10,
+          systemPrompt: 'Custom prompt',
+        },
+      };
+
+      expect(payload.options?.maxIterations).toBe(10);
+      expect(payload.options?.systemPrompt).toBe('Custom prompt');
+    });
+
+    it('should accept payload with all fields', () => {
+      const payload: AgentTaskPayload = {
+        task: 'Fill the form',
+        tabId: 789,
+        options: {
+          maxIterations: 20,
+          systemPrompt: 'Be thorough',
+        },
+      };
+
+      expect(payload.task).toBe('Fill the form');
+      expect(payload.tabId).toBe(789);
+      expect(payload.options?.maxIterations).toBe(20);
+    });
+  });
+});
+
+// ============================================================================
+// Agent State Update Message Type Tests
+// ============================================================================
+
+describe('AgentStateUpdateMessage Type', () => {
+  describe('message structure', () => {
+    it('should define state update message', () => {
+      const message: AgentStateUpdateMessage = {
+        type: 'AGENT_STATE_UPDATE',
+        state: {
+          phase: 'idle',
+          task: 'test',
+          iterations: 0,
+          toolCalls: [],
+          createdAt: Date.now(),
+        },
+        tabId: 123,
+      };
+
+      expect(message.type).toBe('AGENT_STATE_UPDATE');
+      expect(message.tabId).toBe(123);
+      expect(message.state.phase).toBe('idle');
+    });
+
+    it('should accept different phases', () => {
+      const phases: Array<AgentState['phase']> = [
+        'idle',
+        'planning',
+        'executing',
+        'evaluating',
+        'completed',
+        'failed',
+      ];
+
+      phases.forEach((phase) => {
+        const message: AgentStateUpdateMessage = {
+          type: 'AGENT_STATE_UPDATE',
+          state: {
+            phase,
+            task: 'test',
+            iterations: 0,
+            toolCalls: [],
+            createdAt: Date.now(),
+          },
+          tabId: 1,
+        };
+
+        expect(message.state.phase).toBe(phase);
+      });
     });
   });
 });

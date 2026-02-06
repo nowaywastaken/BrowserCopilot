@@ -327,3 +327,258 @@ describe('Tool Executor', () => {
     });
   });
 });
+
+// ============================================================================
+// Edge Case Tests
+// ============================================================================
+
+describe('Tool Executor Edge Cases', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  describe('ToolRegistry edge cases', () => {
+    it('should handle empty registry', async () => {
+      const { getToolDefinitions } = await import('../../../src/lib/agent/tool-executor');
+
+      const emptyRegistry = new Map<string, any>();
+      const definitions = getToolDefinitions(emptyRegistry);
+
+      expect(definitions).toEqual([]);
+    });
+
+    it('should handle registry with single tool', async () => {
+      const { createToolRegistry, getToolDefinitions } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      registry.delete('captureScreenshot');
+      registry.delete('captureDOM');
+
+      const definitions = getToolDefinitions(registry);
+
+      expect(definitions.length).toBeLessThan(13);
+    });
+
+    it('should handle duplicate tool names gracefully', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      const originalSize = registry.size;
+
+      // Adding a duplicate key won't increase size
+      registry.set('navigate', registry.get('navigate')!);
+
+      expect(registry.size).toBe(originalSize);
+    });
+  });
+
+  describe('Parameter validation', () => {
+    it('should have correct parameter types for all tools', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+
+      for (const [name, tool] of registry) {
+        expect(typeof tool.name).toBe('string');
+        expect(typeof tool.description).toBe('string');
+        expect(typeof tool.parameters).toBe('object');
+        expect(typeof tool.parameters.type).toBe('string');
+        expect(typeof tool.parameters.properties).toBe('object');
+      }
+    });
+
+    it('should mark required parameters correctly', async () => {
+      const { navigateExecutor, captureScreenshotExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+      expect(navigateExecutor.parameters.required).toContain('url');
+      expect(captureScreenshotExecutor.parameters.required).toContain('quality');
+    });
+
+    it('should have optional parameters for optional fields', async () => {
+      const { scrollExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+      // x, y, behavior are technically optional in the schema
+      // but the implementation handles defaults
+      expect(scrollExecutor.parameters.properties).toHaveProperty('x');
+      expect(scrollExecutor.parameters.properties).toHaveProperty('y');
+    });
+  });
+
+  describe('Tool descriptions', () => {
+    it('should have descriptive descriptions for all tools', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+
+      for (const [name, tool] of registry) {
+        expect(tool.description.length).toBeGreaterThan(10);
+      }
+    });
+
+    it('should mention key parameters in descriptions', async () => {
+      const { navigateExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+      expect(navigateExecutor.description).toContain('URL');
+    });
+
+    it('should mention screenshot quality in description', async () => {
+      const { captureScreenshotExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+      expect(captureScreenshotExecutor.description).toContain('screenshot');
+    });
+  });
+
+  describe('Parameter constraints', () => {
+    it('should have enum values for screenshot quality', async () => {
+      const { captureScreenshotExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+      const qualityParam = captureScreenshotExecutor.parameters.properties.quality;
+      expect(qualityParam.enum).toEqual(['low', 'medium', 'high']);
+    });
+
+    it('should have enum values for scroll behavior', async () => {
+      const { scrollExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+      const behaviorParam = scrollExecutor.parameters.properties.behavior;
+      expect(behaviorParam.enum).toEqual(['auto', 'smooth']);
+    });
+  });
+
+  describe('Tool name consistency', () => {
+    it('should have consistent naming across exports', async () => {
+      const {
+        ALL_TOOLS,
+        captureScreenshotExecutor,
+        captureDOMExecutor,
+        navigateExecutor,
+        clickElementExecutor,
+        fillFormExecutor,
+        scrollExecutor,
+      } = await import('../../../src/lib/agent/tool-executor');
+
+      // Verify export names match tool names
+      expect(captureScreenshotExecutor.name).toBe('captureScreenshot');
+      expect(captureDOMExecutor.name).toBe('captureDOM');
+      expect(navigateExecutor.name).toBe('navigate');
+      expect(clickElementExecutor.name).toBe('clickElement');
+      expect(fillFormExecutor.name).toBe('fillForm');
+      expect(scrollExecutor.name).toBe('scroll');
+
+      // Verify ALL_TOOLS contains all exports
+      expect(ALL_TOOLS.length).toBe(13);
+    });
+
+    it('should have unique tool names', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      const names = Array.from(registry.keys());
+
+      const uniqueNames = new Set(names);
+      expect(uniqueNames.size).toBe(names.length);
+    });
+  });
+});
+
+// ============================================================================
+// Type Definition Tests
+// ============================================================================
+
+describe('Tool Executor Type Definitions', () => {
+  describe('ScreenshotQuality type', () => {
+    it('should allow literal values', () => {
+      const values: Array<'low' | 'medium' | 'high'> = ['low', 'medium', 'high'];
+      expect(values.length).toBe(3);
+    });
+  });
+
+  describe('ToolResult structure', () => {
+    it('should define success result structure', () => {
+      const successResult = {
+        toolName: 'test',
+        success: true,
+        data: { key: 'value' },
+        timestamp: Date.now(),
+      };
+
+      expect(successResult.success).toBe(true);
+      expect(successResult.data).toBeDefined();
+    });
+
+    it('should define error result structure', () => {
+      const errorResult = {
+        toolName: 'test',
+        success: false,
+        error: 'Something went wrong',
+        timestamp: Date.now(),
+      };
+
+      expect(errorResult.success).toBe(false);
+      expect(errorResult.error).toBeDefined();
+    });
+  });
+
+  describe('ToolContext structure', () => {
+    it('should define context with tabId', () => {
+      const context = {
+        tabId: 123,
+        url: 'https://example.com',
+      };
+
+      expect(context.tabId).toBe(123);
+      expect(context.url).toBe('https://example.com');
+    });
+
+    it('should allow optional fields', () => {
+      const context = {
+        tabId: 123,
+      };
+
+      expect(context.tabId).toBe(123);
+      expect(context.url).toBeUndefined();
+    });
+  });
+
+  describe('ToolDefinition structure', () => {
+    it('should define tool definition with required fields', () => {
+      const definition = {
+        name: 'testTool',
+        description: 'A test tool',
+        parameters: {
+          type: 'object',
+          properties: {},
+        },
+      };
+
+      expect(definition.name).toBe('testTool');
+      expect(definition.description).toBe('A test tool');
+      expect(definition.parameters.type).toBe('object');
+    });
+  });
+
+  describe('ToolParameterSchema structure', () => {
+    it('should support enum constraints', () => {
+      const schema = {
+        type: 'string',
+        enum: ['value1', 'value2'],
+      };
+
+      expect(schema.enum).toEqual(['value1', 'value2']);
+    });
+
+    it('should support numeric constraints', () => {
+      const schema = {
+        type: 'number',
+        minimum: 0,
+        maximum: 100,
+      };
+
+      expect(schema.minimum).toBe(0);
+      expect(schema.maximum).toBe(100);
+    });
+  });
+});

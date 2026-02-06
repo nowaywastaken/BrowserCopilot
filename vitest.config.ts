@@ -32,7 +32,7 @@ export default defineConfig({
         'src/contents/**',
         // Exclude deprecated/openai.ts (use chat-service instead)
         'src/lib/openai.ts',
-        // Exclude complex integration files
+        // Exclude complex integration files (LangChain deps)
         'src/lib/memory.ts',
         'src/lib/storage.ts',
       ],
