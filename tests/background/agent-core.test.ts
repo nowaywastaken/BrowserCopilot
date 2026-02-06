@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AgentCore, runAgentTask } from '../../src/background/agent-core';
+import { AgentCore } from '../../src/background/agent-core';
 import {
   createInitialState,
   createCompletedState,
@@ -17,81 +17,8 @@ import {
   isTerminalPhase,
   getPhaseDisplayName,
   getAgentSummary,
-  type AgentState,
   type ToolCallRecord,
 } from '../../src/lib/agent/agent-state';
-import type { ToolDefinition } from '../../src/lib/openai';
-
-// ============================================================================
-// Mock Tool Executor
-// ============================================================================
-
-const createMockToolExecutor = (
-  responses: Array<{ success: boolean; result?: unknown; error?: string }>
-): {
-  execute: (
-    toolName: string,
-    args: Record<string, unknown>,
-    tabContext?: { tabId?: number; url?: string; title?: string }
-  ) => Promise<{ success: boolean; result?: unknown; error?: string }>;
-  getAvailableTools: () => ToolDefinition[];
-  getCallHistory: () => Array<{ toolName: string; args: Record<string, unknown> }>;
-} => {
-  let callIndex = 0;
-  const callHistory: Array<{ toolName: string; args: Record<string, unknown> }> = [];
-
-  return {
-    execute: async (toolName, args) => {
-      callHistory.push({ toolName, args });
-      const response = responses[callIndex] || { success: true, result: 'done' };
-      callIndex++;
-      return response;
-    },
-    getAvailableTools: () => [
-      {
-        type: 'function',
-        function: {
-          name: 'navigate',
-          description: 'Navigate to a URL',
-          parameters: {
-            type: 'object',
-            properties: { url: { type: 'string', description: 'URL to navigate to' } },
-            required: ['url'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'click',
-          description: 'Click an element',
-          parameters: {
-            type: 'object',
-            properties: { selector: { type: 'string', description: 'CSS selector' } },
-            required: ['selector'],
-          },
-        },
-      },
-    ],
-    getCallHistory: () => callHistory,
-  };
-};
-
-// ============================================================================
-// Mock ChatService
-// ============================================================================
-
-const createMockChatService = (response: string, shouldFail = false): typeof import('../../src/lib/services/chat-service').ChatService => {
-  return {
-    chat: vi.fn().mockImplementation(async () => {
-      if (shouldFail) {
-        throw new Error('LLM error');
-      }
-      return response;
-    }),
-    streamChat: vi.fn(),
-  } as any;
-};
 
 // ============================================================================
 // Agent State Tests
@@ -330,10 +257,6 @@ describe('AgentCore', () => {
 
   describe('run with mocked dependencies', () => {
     it('should complete task when no action needed', async () => {
-      const mockExecutor = createMockToolExecutor([
-        { success: true, result: 'done' },
-      ]);
-
       // Mock ChatService to return a completion response
       const mockResponse = JSON.stringify({
         thought: 'No action needed',
@@ -352,7 +275,6 @@ describe('AgentCore', () => {
       // Note: Due to module mocking complexity, we're testing state management
       // The actual run() method would need integration testing
 
-      const agent = new AgentCore({ toolExecutor: mockExecutor });
       const state = createInitialState('Simple task');
 
       expect(state.phase).toBe('idle');

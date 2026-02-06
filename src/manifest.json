@@ -32,9 +32,14 @@
   "permissions": [
     "storage",
     "activeTab",
-    "sidePanel"
+    "sidePanel",
+    "tabs",
+    "scripting",
+    "userScripts",
+    "offscreen"
   ],
   "host_permissions": [
+    "<all_urls>",
     "https://openrouter.ai/*",
     "https://*.openrouter.ai/*"
   ],
@@ -54,6 +59,17 @@
       "matches": [
         "<all_urls>"
       ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "contents/inject.ts"
+      ],
+      "run_at": "document_idle"
     }
   ]
 }

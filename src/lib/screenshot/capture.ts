@@ -4,11 +4,9 @@
  * and chrome.scripting.executeScript to get device info (DPR)
  */
 
-import { SCREENSHOT_QUALITY, type ScreenshotQuality } from './constants';
-
 export interface ScreenshotCaptureOptions {
   /** Quality level for the screenshot (affects compression) */
-  quality?: ScreenshotQuality;
+  quality?: 'low' | 'medium' | 'high';
   /** Whether to return the screenshot data to the user immediately */
   returnToUser?: boolean;
 }
@@ -38,6 +36,15 @@ interface DeviceInfo {
   height: number;
   devicePixelRatio: number;
 }
+
+/**
+ * Quality level to JPEG quality mapping (1-100 scale for chrome.tabs.captureVisibleTab)
+ */
+const QUALITY_MAP: Record<'low' | 'medium' | 'high', number> = {
+  low: 50,
+  medium: 75,
+  high: 92,
+};
 
 /**
  * Captures a screenshot of the current visible tab
@@ -74,7 +81,7 @@ export async function captureScreenshot(
     // Capture the visible tab
     const dataUrl = await chrome.tabs.captureVisibleTab(activeTab.windowId, {
       format: 'jpeg',
-      quality: SCREENSHOT_QUALITY[quality],
+      quality: QUALITY_MAP[quality],
     });
 
     const screenshotData: ScreenshotData = {
@@ -84,9 +91,9 @@ export async function captureScreenshot(
       devicePixelRatio: deviceInfo.devicePixelRatio,
     };
 
-    if (returnToUser) {
-      // Log for debugging purposes
-      console.log(`Screenshot captured: ${screenshotData.width}x${screenshotData.height} @ ${screenshotData.devicePixelRatio}x DPR`);
+    if (!returnToUser) {
+      // Log for debugging purposes when not returning to user
+      console.log(`Screenshot captured but not returned to user: ${screenshotData.width}x${screenshotData.height} @ ${screenshotData.devicePixelRatio}x DPR`);
     }
 
     return {
@@ -114,7 +121,7 @@ async function getDeviceInfo(tabId: number): Promise<DeviceInfo | null> {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId },
-      func: (): DeviceInfo => {
+      func: () => {
         return {
           width: window.innerWidth,
           height: window.innerHeight,

@@ -28,8 +28,10 @@ import {
   Zap,
   X,
   Info,
+  Bot,
 } from 'lucide-react';
 import { ChatWindow } from './components/ChatWindow';
+import { AgentExecutionView } from './components/AgentExecutionView';
 import { Message } from './components/MessageBubble';
 import { ModelSelector } from './components/ModelSelector';
 import { ProviderSelector } from './components/ProviderSelector';
@@ -39,6 +41,7 @@ import type { ProviderId } from '../lib/types/provider';
 import { getDefaultModel, PROVIDERS } from '../lib/providers';
 import { LocalMemoryManager } from '../lib/memory';
 import type { ChatMessage } from '../lib/openai';
+import type { AgentState } from '../lib/agent/agent-state';
 
 // ============================================================================
 // 类型定义
@@ -376,6 +379,11 @@ function App() {
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [memoryCount, setMemoryCount] = useState(0);
 
+  // Task 12: Agent 模式状态
+  const [isAgentMode, setIsAgentMode] = useState(false);
+  const [agentState, setAgentState] = useState<AgentState | null>(null);
+  const [agentLoading, setAgentLoading] = useState(false);
+
   // 设置面板中的 API Keys 状态
   const [providerApiKeys, setProviderApiKeys] = useState<ProviderApiKeysState>({
     openai: '',
@@ -662,7 +670,7 @@ function App() {
     }
   }, [saveMessages]);
 
-  // Task 12: 发送消息 - 使用 ChatService
+  // Task 12: 发送消息 - 检测 Agent 模式并处理
   const handleSend = useCallback(async (content: string) => {
     const apiKey = await getCurrentApiKey();
     if (!apiKey) {
@@ -676,6 +684,13 @@ function App() {
     }
 
     if (!content.trim()) return;
+
+    // Task 12: 检测是否为 Agent 任务
+    const isAgentTask = await handleDetectAgentMode(content.trim());
+    if (isAgentTask) {
+      await handleRunAgent(content.trim());
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -817,6 +832,71 @@ function App() {
     setError(null);
   }, []);
 
+  // Task 12: 检测是否为 Agent 模式
+  const handleDetectAgentMode = useCallback(async (message: string): Promise<boolean> => {
+    try {
+      const intentResult = await ChatService.detectAgentMode(message);
+      return intentResult.requiresAgent;
+    } catch (err) {
+      console.error('Failed to detect agent mode:', err);
+      return false;
+    }
+  }, []);
+
+  // Task 12: 启动 Agent 任务
+  const handleRunAgent = useCallback(async (task: string) => {
+    setAgentLoading(true);
+    setError(null);
+
+    try {
+      // 进入 Agent 模式
+      setIsAgentMode(true);
+
+      // 启动 Agent 任务并监听状态更新
+      const finalState = await ChatService.runAgent(task, (state: AgentState) => {
+        setAgentState(state);
+      });
+
+      setAgentState(finalState);
+    } catch (err) {
+      console.error('Agent task error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Agent 任务执行失败';
+
+      setError({
+        message: errorMessage,
+        timestamp: Date.now(),
+        recoverable: true,
+      });
+
+      setIsAgentMode(false);
+      setAgentState(null);
+    } finally {
+      setAgentLoading(false);
+    }
+  }, []);
+
+  // Task 12: 停止 Agent 任务
+  const handleStopAgent = useCallback(async () => {
+    try {
+      const success = await ChatService.stopAgent();
+      if (success) {
+        // 获取最终状态
+        const finalState = await ChatService.getAgentState();
+        if (finalState) {
+          setAgentState(finalState);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to stop agent:', err);
+    }
+  }, []);
+
+  // Task 12: 返回聊天模式
+  const handleBackToChat = useCallback(() => {
+    setIsAgentMode(false);
+    setAgentState(null);
+  }, []);
+
   // ========== 渲染 ==========
 
   return (
@@ -849,84 +929,122 @@ function App() {
                 Browser Pal
               </h1>
 
+              {/* Task 12: Agent 模式指示器 */}
+              {isAgentMode && (
+                <div
+                  className={clsx(
+                    'flex items-center gap-1.5 px-2.5 py-1',
+                    'bg-purple-100 dark:bg-purple-900/30',
+                    'rounded-lg text-xs',
+                    'text-purple-700 dark:text-purple-300',
+                    'animate-pulse'
+                  )}
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  <span>Agent</span>
+                </div>
+              )}
+
               {/* Task 13: 提供商选择器 */}
-              <div className="hidden sm:block">
-                <ProviderSelector
-                  value={selectedProvider}
-                  onChange={handleProviderChange}
-                  configuredProviders={configuredProviders}
-                />
-              </div>
+              {!isAgentMode && (
+                <div className="hidden sm:block">
+                  <ProviderSelector
+                    value={selectedProvider}
+                    onChange={handleProviderChange}
+                    configuredProviders={configuredProviders}
+                  />
+                </div>
+              )}
 
               {/* 模型选择器 */}
-              <div className="hidden sm:block">
-                <ModelSelector
-                  providerId={selectedProvider}
-                  value={selectedModel}
-                  onChange={handleModelChange}
-                />
-              </div>
+              {!isAgentMode && (
+                <div className="hidden sm:block">
+                  <ModelSelector
+                    providerId={selectedProvider}
+                    value={selectedModel}
+                    onChange={handleModelChange}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
           {/* 头部操作 */}
           <div className="flex items-center gap-2">
             {/* 记忆计数 */}
-            <div
-              className={clsx(
-                'hidden sm:flex items-center gap-1.5 px-2.5 py-1',
-                'bg-gray-100 dark:bg-gray-700',
-                'rounded-lg text-xs',
-                'text-gray-600 dark:text-gray-300'
-              )}
-            >
-              <Brain className="w-3.5 h-3.5" />
-              <span>{memoryCount}</span>
-            </div>
+            {!isAgentMode && (
+              <div
+                className={clsx(
+                  'hidden sm:flex items-center gap-1.5 px-2.5 py-1',
+                  'bg-gray-100 dark:bg-gray-700',
+                  'rounded-lg text-xs',
+                  'text-gray-600 dark:text-gray-300'
+                )}
+              >
+                <Brain className="w-3.5 h-3.5" />
+                <span>{memoryCount}</span>
+              </div>
+            )}
 
             {/* 深色模式切换 */}
-            <button
-              onClick={toggleDarkMode}
-              className={clsx(
-                'p-2 rounded-lg',
-                'text-gray-600 dark:text-gray-300',
-                'hover:bg-gray-100 dark:hover:bg-gray-700',
-                'transition-colors'
-              )}
-              title={darkMode ? '切换到浅色模式' : '切换到深色模式'}
-            >
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            {!isAgentMode && (
+              <button
+                onClick={toggleDarkMode}
+                className={clsx(
+                  'p-2 rounded-lg',
+                  'text-gray-600 dark:text-gray-300',
+                  'hover:bg-gray-100 dark:hover:bg-gray-700',
+                  'transition-colors'
+                )}
+                title={darkMode ? '切换到浅色模式' : '切换到深色模式'}
+              >
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            )}
 
             {/* 设置按钮 */}
-            <button
-              onClick={() => setShowSettings(true)}
-              className={clsx(
-                'p-2 rounded-lg',
-                'text-gray-600 dark:text-gray-300',
-                'hover:bg-gray-100 dark:hover:bg-gray-700',
-                'transition-colors'
-              )}
-              title="设置"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+            {!isAgentMode && (
+              <button
+                onClick={() => setShowSettings(true)}
+                className={clsx(
+                  'p-2 rounded-lg',
+                  'text-gray-600 dark:text-gray-300',
+                  'hover:bg-gray-100 dark:hover:bg-gray-700',
+                  'transition-colors'
+                )}
+                title="设置"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </header>
 
         {/* 错误提示 */}
         <ErrorBanner error={error} onDismiss={handleDismissError} />
 
-        {/* 聊天窗口 */}
-        <div className="flex-1 overflow-hidden">
-          <ChatWindow
-            messages={messages}
-            onSend={handleSend}
-            onStop={handleStop}
-            loading={loading}
-            disabled={!configuredProviders.includes(selectedProvider)}
-          />
-        </div>
+        {/* Task 12: Agent 执行视图 */}
+        {isAgentMode ? (
+          <div className="flex-1 overflow-hidden">
+            <AgentExecutionView
+              agentState={agentState}
+              isRunning={agentLoading}
+              onStop={handleStopAgent}
+              onBackToChat={handleBackToChat}
+            />
+          </div>
+        ) : (
+          /* 聊天窗口 */
+          <div className="flex-1 overflow-hidden">
+            <ChatWindow
+              messages={messages}
+              onSend={handleSend}
+              onStop={handleStop}
+              loading={loading}
+              disabled={!configuredProviders.includes(selectedProvider)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Task 14 & 15: 设置模态框 - 多提供商配置和当前使用显示 */}

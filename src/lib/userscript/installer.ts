@@ -1,57 +1,172 @@
 /**
- * UserScript Installer - AutoMonkey Integration
- *
- * Installs Tampermonkey scripts using AutoMonkey's install dialog.
- * Uses chrome.runtime.sendMessage to communicate with AutoMonkey's background service worker.
+ * UserScript Installer
+ * Installs Tampermonkey/GreaseMonkey scripts
  */
 
-import { AUTOMONKEY_EXTENSION_ID } from './constants';
+import { parseScriptMetadata, validateScriptCode, type UserScriptInfo } from './manager';
 
+/**
+ * Script installation options
+ */
+export interface InstallOptions {
+  code: string;
+  matches?: string[];
+  runAt?: 'document-start' | 'document-body' | 'document-end' | 'document-idle';
+}
+
+/**
+ * Installation result
+ */
 export interface InstallResult {
   success: boolean;
   scriptId?: string;
+  script?: UserScriptInfo;
   error?: string;
 }
 
 /**
- * Installs a user script by sending the code to AutoMonkey's install dialog.
- *
- * @param code - The raw JavaScript code of the Tampermonkey script
- * @returns Promise resolving to an InstallResult
+ * Install a user script
+ * @param options - Installation options
+ * @returns Installation result
  */
-export async function installUserScript(code: string): Promise<InstallResult> {
-  if (!code || typeof code !== 'string') {
+export async function installUserScript(options: InstallOptions): Promise<InstallResult> {
+  const { code, matches, runAt } = options;
+
+  // Validate script code
+  const validation = validateScriptCode(code);
+  if (!validation.valid) {
     return {
       success: false,
-      error: 'Invalid script code: must be a non-empty string',
+      error: validation.error,
     };
   }
 
-  try {
-    const response = await chrome.runtime.sendMessage(
-      AUTOMONKEY_EXTENSION_ID,
-      {
-        action: 'open_install_dialog',
-        code,
-      }
-    );
+  // Parse metadata
+  const metadata = parseScriptMetadata(code);
 
-    if (response?.success) {
-      return {
-        success: true,
-        scriptId: response.scriptId,
-      };
+  return new Promise((resolve) => {
+    try {
+      chrome.userScripts.register(
+        {
+          code,
+          matches: matches || metadata.matchPatterns || ['<all_urls>'],
+          runAt: runAt || metadata.runAt || 'document-idle',
+          grants: metadata.grants,
+        },
+        () => {
+          // Get the newly registered script
+          chrome.userScripts.getScripts((scripts) => {
+            const installedScript = scripts.find((s) => s.name === metadata.name);
+            if (installedScript) {
+              resolve({
+                success: true,
+                scriptId: installedScript.id,
+                script: {
+                  id: installedScript.id,
+                  name: installedScript.name,
+                  enabled: true,
+                  matches: [],
+                  permissions: [],
+                  createdAt: 0,
+                },
+              });
+            } else {
+              resolve({
+                success: true,
+                scriptId: scripts[scripts.length - 1]?.id,
+              });
+            }
+          });
+        }
+      );
+    } catch (error) {
+      resolve({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to install script',
+      });
     }
+  });
+}
 
-    return {
-      success: false,
-      error: response?.error || 'Failed to install script',
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return {
-      success: false,
-      error: `Failed to communicate with AutoMonkey: ${errorMessage}`,
-    };
-  }
+/**
+ * Update an existing user script
+ * @param scriptId - The ID of the script to update
+ * @param options - Update options
+ * @returns Update result
+ */
+export async function updateUserScript(
+  scriptId: string,
+  options: Partial<InstallOptions>
+): Promise<InstallResult> {
+  return new Promise((resolve) => {
+    try {
+      const updateOptions = {
+        ids: [scriptId],
+        code: options.code,
+        matches: options.matches,
+        runAt: options.runAt,
+      };
+
+      if (options.code) updateOptions.code = options.code;
+      if (options.matches) updateOptions.matches = options.matches;
+      if (options.runAt) updateOptions.runAt = options.runAt;
+
+      chrome.userScripts.update(updateOptions, () => {
+        resolve({
+          success: true,
+          scriptId,
+        });
+      });
+    } catch (error) {
+      resolve({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update script',
+      });
+    }
+  });
+}
+
+/**
+ * Quick install script with minimal options
+ * @param code - The script code to install
+ * @returns Installation result
+ */
+export async function quickInstall(code: string): Promise<InstallResult> {
+  return installUserScript({
+    code,
+    matches: ['<all_urls>'],
+    runAt: 'document-idle',
+  });
+}
+
+/**
+ * Template for creating a new user script
+ * @param name - Script name
+ * @param description - Script description
+ * @param matchPattern - URL match pattern
+ * @returns Template script code
+ */
+export function createScriptTemplate(
+  name: string,
+  description: string,
+  matchPattern: string = '*://*.example.com/*'
+): string {
+  return `// ==UserScript==
+// @name        ${name}
+// @namespace   http://tampermonkey.net/
+// @version     1.0
+// @description ${description}
+// @author      User
+// @match       ${matchPattern}
+// @grant       none
+// @run-at      document-idle
+// ==/UserScript==
+
+(function() {
+  'use strict';
+
+  // Your code here
+
+})();
+`;
 }

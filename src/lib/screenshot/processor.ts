@@ -4,8 +4,6 @@
  * Uses Image and Canvas to scale screenshots appropriately
  */
 
-import { getQualityValue, type ScreenshotQuality } from './constants';
-
 export interface ProcessedScreenshot {
   /** The processed data URL (scaled for display) */
   dataUrl: string;
@@ -22,6 +20,11 @@ export interface ProcessedScreenshot {
 }
 
 /**
+ * Quality setting for JPEG compression
+ */
+type QualitySetting = 'low' | 'medium' | 'high';
+
+/**
  * Processes a screenshot for display by scaling based on device pixel ratio
  * This ensures WYSIWYG rendering across different display configurations
  *
@@ -33,7 +36,7 @@ export interface ProcessedScreenshot {
 export async function processScreenshotForDisplay(
   dataUrl: string,
   devicePixelRatio: number,
-  quality: ScreenshotQuality = 'high'
+  quality: QualitySetting = 'high'
 ): Promise<ProcessedScreenshot> {
   // Load the image from the data URL
   const image = await loadImage(dataUrl);
@@ -116,7 +119,7 @@ export async function scaleScreenshot(
   dataUrl: string,
   targetWidth: number,
   targetHeight?: number,
-  quality: ScreenshotQuality = 'high'
+  quality: QualitySetting = 'high'
 ): Promise<ProcessedScreenshot> {
   const image = await loadImage(dataUrl);
 
@@ -163,6 +166,21 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error('Failed to load image'));
     image.src = dataUrl;
   });
+}
+
+/**
+ * Converts quality setting to JPEG quality value
+ *
+ * @param quality - Quality setting
+ * @returns JPEG quality value (0-1)
+ */
+function getQualityValue(quality: QualitySetting): number {
+  const qualityMap: Record<QualitySetting, number> = {
+    low: 0.5,
+    medium: 0.75,
+    high: 0.92, // Slightly less than 1.0 for file size efficiency
+  };
+  return qualityMap[quality];
 }
 
 /**

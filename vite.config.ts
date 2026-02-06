@@ -3,12 +3,6 @@ import react from '@vitejs/plugin-react';
 import { crx } from '@crxjs/vite-plugin';
 import path from 'path';
 import fs from 'fs';
-import { loadEnv } from 'vite';
-
-// 读取 manifest.json
-const manifestPath = path.resolve(__dirname, 'src/manifest.json');
-const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
-const manifest = JSON.parse(manifestContent);
 
 // 插件：处理 sidepanel.html 中的脚本引用
 function sidepanelPlugin(): Plugin {
@@ -72,7 +66,28 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     crx({
-      manifest: manifest as any,
+      manifest: {
+        manifest_version: 3,
+        name: 'BrowserCopilot - AI Browser Agent',
+        version: '2.0.0',
+        description: 'AI-powered browser automation with screenshot and user script capabilities',
+        side_panel: {
+          default_path: 'src/sidepanel/sidepanel.html',
+        },
+        permissions: ['sidePanel', 'tabs', 'scripting', 'userScripts', 'offscreen', 'storage'],
+        host_permissions: ['<all_urls>'],
+        background: {
+          service_worker: 'src/background/index.ts',
+          type: 'module',
+        },
+        content_scripts: [
+          {
+            matches: ['<all_urls>'],
+            js: ['src/contents/inject.ts'],
+            run_at: 'document_idle',
+          },
+        ],
+      },
       contentScripts: {
         injectCss: true,
       },

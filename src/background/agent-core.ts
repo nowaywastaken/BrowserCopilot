@@ -25,22 +25,12 @@ import {
   shouldContinue,
   getPhaseDisplayName,
 } from '../lib/agent/agent-state';
-import type { ChatMessage, ToolDefinition } from '../lib/openai';
+import { createToolRegistry, type ToolExecutor, type ToolContext, type ToolResult } from '../lib/agent/tool-executor';
+import type { ChatMessage } from '../lib/openai';
 
 // ============================================================================
 // Types
 // ============================================================================
-
-/** Tool executor interface */
-export interface ToolExecutor {
-  execute(
-    toolName: string,
-    args: Record<string, unknown>,
-    tabContext?: { tabId?: number; url?: string; title?: string }
-  ): Promise<{ success: boolean; result?: unknown; error?: string }>;
-  getAvailableTools(): ToolDefinition[];
-  getToolDescription?(toolName: string): string | undefined;
-}
 
 /** Agent core configuration */
 export interface AgentCoreConfig {
@@ -177,9 +167,45 @@ export class AgentCore {
    * Create a default tool executor if none provided
    */
   private createDefaultToolExecutor(): ToolExecutor {
+    const registry = createToolRegistry();
+
     return {
-      execute: async () => ({ success: false, error: 'No tool executor configured' }),
-      getAvailableTools: () => [],
+      name: 'default',
+      description: 'Default tool executor for browser automation',
+      parameters: {
+        type: 'object' as const,
+        properties: {},
+      },
+      execute: async (
+        params: Record<string, unknown>,
+        context: ToolContext
+      ): Promise<ToolResult> => {
+        const toolName = params.toolName as string || '';
+        const args = { ...params };
+        delete (args as Record<string, unknown>).toolName;
+
+        const executor = registry.get(toolName);
+        if (!executor) {
+          return {
+            toolName,
+            success: false,
+            error: `Unknown tool: ${toolName}`,
+            timestamp: Date.now(),
+          };
+        }
+
+        try {
+          return await executor.execute(args, context);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          return {
+            toolName,
+            success: false,
+            error: errorMessage,
+            timestamp: Date.now(),
+          };
+        }
+      },
     };
   }
 
@@ -353,7 +379,10 @@ export class AgentCore {
       const tabContext = await this.getCurrentTabContext();
 
       // Execute the tool
-      const result = await this.toolExecutor.execute(toolName, args, tabContext);
+      const result = await this.toolExecutor.execute(
+        { toolName, ...args },
+        { tabId: tabContext.tabId, url: tabContext.url }
+      );
       const duration = Date.now() - startTime;
 
       // Create tool call record
@@ -361,7 +390,7 @@ export class AgentCore {
         id: crypto.randomUUID(),
         toolName,
         arguments: args,
-        result: result.result,
+        result: result.data,
         success: result.success,
         error: result.error,
         timestamp: startTime,
@@ -377,7 +406,7 @@ export class AgentCore {
         shouldStop: false,
         toolName,
         arguments: args,
-        result: result,
+        result: result.data,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
