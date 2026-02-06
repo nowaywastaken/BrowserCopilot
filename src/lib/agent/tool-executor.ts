@@ -864,7 +864,131 @@ const fillFormExecutor: ToolExecutor = {
 };
 
 // ============================================================================
-// Tool 12: Scroll
+// Tool 12: Summarize Page
+// ============================================================================
+
+const summarizePageExecutor: ToolExecutor = {
+  name: 'summarizePage',
+  description: 'Get a concise summary of the page structure including main content areas, navigation, ads, and interactive elements. Use this when you need quick understanding of the page layout without processing the entire DOM.',
+  parameters: {
+    type: 'object',
+    properties: {},
+  },
+  async execute(_params: Record<string, unknown>, _context: ToolContext): Promise<ToolResult> {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+
+      if (!tabId) {
+        return {
+          toolName: 'summarizePage',
+          success: false,
+          error: 'No active tab found',
+          timestamp: Date.now(),
+        };
+      }
+
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          // Analyze page structure
+          const mainAreas: string[] = [];
+          const interactiveElements: string[] = [];
+          const navElements: string[] = [];
+          const adIndicators: string[] = [];
+
+          // Find main content areas
+          const mainSelectors = ['main', '[role="main"]', '#content', '.content', '#main', '.main'];
+          for (const selector of mainSelectors) {
+            const el = document.querySelector(selector);
+            if (el) {
+              mainAreas.push(selector);
+              break;
+            }
+          }
+
+          // Find navigation elements
+          const navSelectors = ['nav', '[role="navigation"]', '.nav', '.navigation', '#nav', '#navigation'];
+          for (const selector of navSelectors) {
+            const el = document.querySelector(selector);
+            if (el) {
+              navElements.push(selector);
+            }
+          }
+
+          // Find interactive elements
+          const buttons = document.querySelectorAll('button, [role="button"], input[type="submit"], .btn, .button');
+          const links = document.querySelectorAll('a[href]');
+          const forms = document.querySelectorAll('form');
+
+          interactiveElements.push(`buttons: ${buttons.length}`);
+          interactiveElements.push(`links: ${links.length}`);
+          interactiveElements.push(`forms: ${forms.length}`);
+
+          // Find ad-related elements
+          const adSelectors = [
+            '[class*="ad-"]', '[class*="ads-"]', '[id*="ad-"]', '[id*="ads-"]',
+            '[class*="banner"]', '[id*="banner"]', '.advertisement', '.advert',
+            'iframe[src*="doubleclick"]', 'iframe[src*="adservice"]',
+          ];
+          for (const selector of adSelectors) {
+            const els = document.querySelectorAll(selector);
+            if (els.length > 0) {
+              adIndicators.push(`${selector}: ${els.length}`);
+            }
+          }
+
+          // Get page title and URL
+          const title = document.title;
+          const url = window.location.href;
+
+          return {
+            success: true,
+            data: {
+              title,
+              url,
+              mainContentAreas: mainAreas,
+              navigationElements: navElements,
+              interactiveElements,
+              adIndicators: adIndicators.length > 0 ? adIndicators : null,
+              totalLinks: links.length,
+              totalButtons: buttons.length,
+              totalForms: forms.length,
+            },
+          };
+        },
+      });
+
+      const result = results[0]?.result;
+      if (result && result.success) {
+        return {
+          toolName: 'summarizePage',
+          success: true,
+          data: result.data,
+          timestamp: Date.now(),
+        };
+      }
+
+      return {
+        toolName: 'summarizePage',
+        success: false,
+        error: result?.error || 'Failed to summarize page',
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        toolName: 'summarizePage',
+        success: false,
+        error: `Summarize page failed: ${errorMessage}`,
+        timestamp: Date.now(),
+      };
+    }
+  },
+};
+
+// ============================================================================
+// Tool 13: Scroll
 // ============================================================================
 
 const scrollExecutor: ToolExecutor = {
@@ -983,6 +1107,7 @@ const ALL_TOOLS: ToolExecutor[] = [
   clickElementExecutor,
   fillFormExecutor,
   scrollExecutor,
+  summarizePageExecutor,
 ];
 
 /**
@@ -1039,5 +1164,6 @@ export {
   clickElementExecutor,
   fillFormExecutor,
   scrollExecutor,
+  summarizePageExecutor,
   ALL_TOOLS,
 };

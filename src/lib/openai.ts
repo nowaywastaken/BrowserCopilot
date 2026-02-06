@@ -37,7 +37,14 @@ export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 /** 聊天消息 */
 export interface ChatMessage {
   role: MessageRole;
-  content: string;
+  content: string | Array<{
+    type: 'image_url' | 'text';
+    image_url?: {
+      url: string;
+      detail?: 'low' | 'high' | 'auto';
+    };
+    text?: string;
+  }>;
   name?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
@@ -719,7 +726,15 @@ export async function sendMessage(
 ): Promise<string> {
   const client = new OpenRouterClient({ apiKey, model });
   const response = await client.chat(messages);
-  return response.choices[0]?.message?.content || '';
+  const content = response.choices[0]?.message?.content;
+  // Handle both string and array content types
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content.map((c) => (c.type === 'text' ? c.text : `[${c.type}]`)).join('');
+  }
+  return '';
 }
 
 /**

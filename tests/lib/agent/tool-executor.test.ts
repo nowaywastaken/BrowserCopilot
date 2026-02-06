@@ -19,14 +19,15 @@ import {
   clickElementExecutor,
   fillFormExecutor,
   scrollExecutor,
+  summarizePageExecutor,
 } from '../../../src/lib/agent/tool-executor';
 
 describe('Tool Executor Interface', () => {
   describe('createToolRegistry', () => {
-    it('should create a registry with all 12 tools', () => {
+    it('should create a registry with all 13 tools', () => {
       const registry = createToolRegistry();
 
-      expect(registry.size).toBe(12);
+      expect(registry.size).toBe(13);
     });
 
     it('should have all expected tool names', () => {
@@ -44,6 +45,7 @@ describe('Tool Executor Interface', () => {
       expect(registry.has('clickElement')).toBe(true);
       expect(registry.has('fillForm')).toBe(true);
       expect(registry.has('scroll')).toBe(true);
+      expect(registry.has('summarizePage')).toBe(true);
     });
   });
 
@@ -52,7 +54,7 @@ describe('Tool Executor Interface', () => {
       const registry = createToolRegistry();
       const definitions = getToolDefinitions(registry);
 
-      expect(definitions.length).toBe(12);
+      expect(definitions.length).toBe(13);
     });
 
     it('should return correct tool names in definitions', () => {
@@ -72,6 +74,7 @@ describe('Tool Executor Interface', () => {
       expect(names).toContain('clickElement');
       expect(names).toContain('fillForm');
       expect(names).toContain('scroll');
+      expect(names).toContain('summarizePage');
     });
   });
 
@@ -273,6 +276,12 @@ describe('Tool Executor Interface', () => {
     it('scroll executor should have correct metadata', () => {
       expect(scrollExecutor.name).toBe('scroll');
       expect(scrollExecutor.description).toBeDefined();
+    });
+
+    it('summarizePage executor should have correct metadata', () => {
+      expect(summarizePageExecutor.name).toBe('summarizePage');
+      expect(summarizePageExecutor.description).toBeDefined();
+      expect(summarizePageExecutor.parameters.type).toBe('object');
     });
   });
 });

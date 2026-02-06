@@ -64,23 +64,28 @@ export interface EvaluationResponse {
 const DEFAULT_SYSTEM_PROMPT = `You are BrowserCopilot, an intelligent browser automation assistant.
 
 Your capabilities:
-- Navigate web pages
-- Click elements and fill forms
-- Take screenshots
-- Read page content
+- Analyze page screenshots to understand visual layout
+- Extract and read page content
+- Click elements, fill forms, scroll pages
 - Execute JavaScript in page context
-- Extract and summarize information
+- Write and install Tampermonkey scripts
 
 Process:
-1. PLAN: Analyze the task and decide what to do next
-2. EXECUTE: Perform the action using tools
-3. EVALUATE: Check if the task is complete or needs more steps
+1. First: Analyze the screenshot to understand the page layout
+2. Then: Decide what information you need
+3. Use tools progressively to gather more details if needed:
+   - Use \`captureDOM\` to understand page structure
+   - Use \`getElementInfo\` for specific element details
+   - Use other tools to interact with the page
+4. Complete the user's task
 
 Guidelines:
 - Think step by step before taking actions
+- If you need to see the page structure, use \`captureDOM\`
+- If you need details about a specific element, use \`getElementInfo\`
+- For Tampermonkey scripts, analyze the page carefully first
 - Be precise with element selectors
 - Handle errors gracefully
-- Ask for clarification if the task is ambiguous
 - Focus on completing the user's goal efficiently
 
 Output format:
@@ -308,8 +313,8 @@ export class AgentCore {
   private async planningPhase(): Promise<{ shouldStop: boolean }> {
     AgentLogger.debug('Starting planning phase');
 
-    // Build conversation history for context
-    const messages = this.buildPlanningMessages();
+    // Build conversation history for context (includes screenshot on first iteration)
+    const messages = await this.buildPlanningMessages();
 
     try {
       const response = await ChatService.chat(messages, {
@@ -524,12 +529,29 @@ export class AgentCore {
 
   /**
    * Build planning messages for LLM
+   * On first iteration, automatically includes a screenshot of the page
    */
-  private buildPlanningMessages(): ChatMessage[] {
+  private async buildPlanningMessages(): Promise<ChatMessage[]> {
     const messages: ChatMessage[] = [];
 
     // System prompt
     messages.push({ role: 'system', content: this.config.systemPrompt });
+
+    // First iteration: include screenshot
+    if (this.state.iterations === 0) {
+      const screenshot = await this.captureInitialScreenshot();
+      if (screenshot.success && screenshot.dataUrl) {
+        messages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: screenshot.dataUrl },
+            },
+          ],
+        });
+      }
+    }
 
     // Task description
     messages.push({
@@ -537,11 +559,38 @@ export class AgentCore {
       content: `Task: ${this.state.task}\n\n${
         this.state.toolCalls.length > 0
           ? `History of actions taken:\n${this.formatToolHistory()}`
-          : 'Please plan your first action.'
+          : this.state.iterations === 0
+            ? 'Please analyze the screenshot and decide your first action.'
+            : 'Please plan your next action.'
       }`,
     });
 
     return messages;
+  }
+
+  /**
+   * Capture initial screenshot for the first planning iteration
+   */
+  private async captureInitialScreenshot(): Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }> {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+      if (!tabId) {
+        return { success: false, error: 'No active tab' };
+      }
+
+      const [result] = await chrome.tabs.captureVisibleTab(tabId, { format: 'png' });
+      return { success: true, dataUrl: result };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
   }
 
   /**
