@@ -1,91 +1,393 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+/**
+ * Screenshot Processor Tests
+ * Tests for the DPR-aware screenshot processing module
+ */
 
-describe('ScreenshotProcessor', () => {
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ProcessedScreenshot } from '../../../src/lib/screenshot/processor';
+
+// Create a minimal mock for canvas operations
+const createMockCanvas = () => {
+  const ctx = {
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: 'high' as const,
+    getContext: vi.fn().mockReturnValue({
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high' as const,
+      drawImage: vi.fn(),
+    }),
+  };
+  return {
+    width: 0,
+    height: 0,
+    getContext: ctx.getContext,
+  };
+};
+
+// Create a valid base64 data URL for testing
+const createTestDataUrl = (width: number, height: number): string => {
+  // Minimal 1x1 PNG base64
+  const mockPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  return `data:image/png;base64,${mockPngBase64}`;
+};
+
+describe('Screenshot Processor', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  describe('quality mapping consistency', () => {
-    it('should use consistent 0-1 scale for quality values', async () => {
-      // Verify quality settings are in correct range
-      // The processor uses: low=0.5, medium=0.75, high=0.92
-      expect(0.5).toBeGreaterThanOrEqual(0);
-      expect(0.5).toBeLessThanOrEqual(1);
-      expect(0.75).toBeGreaterThanOrEqual(0);
-      expect(0.75).toBeLessThanOrEqual(1);
-      expect(0.92).toBeGreaterThanOrEqual(0);
-      expect(0.92).toBeLessThanOrEqual(1);
-    });
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
-  describe('DPR scaling calculations', () => {
-    it('should correctly calculate display dimensions from DPR', () => {
-      // Original capture dimensions at 2x DPR
-      const originalWidth = 3840;
-      const originalHeight = 2160;
+  describe('processScreenshotForDisplay', () => {
+    it('should process screenshot with correct DPR scaling for 2x displays', async () => {
+      const { processScreenshotForDisplay } = await import('../../../src/lib/screenshot/processor');
+      const dataUrl = createTestDataUrl(3840, 2160);
       const devicePixelRatio = 2;
 
-      // Calculate display dimensions (same logic as processor.ts)
-      const displayWidth = Math.round(originalWidth / devicePixelRatio);
-      const displayHeight = Math.round(originalHeight / devicePixelRatio);
+      // Mock Image constructor
+      const mockImage = {
+        width: 3840,
+        height: 2160,
+        complete: true,
+        src: '',
+        onload: null as ((this: HTMLImageElement) => void) | null,
+        onerror: null as ((this: HTMLImageElement, error: Event) => void) | null,
+      };
 
-      expect(displayWidth).toBe(1920);
-      expect(displayHeight).toBe(1080);
+      vi.spyOn(global, 'Image').mockImplementation(() => {
+        const img = mockImage as unknown as HTMLImageElement;
+        // Simulate async load
+        setTimeout(() => img.onload?.(img), 0);
+        return img;
+      });
+
+      // Mock canvas creation
+      const mockCtx = {
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high' as const,
+        drawImage: vi.fn(),
+      };
+      const mockCanvas = {
+        width: 1920,
+        height: 1080,
+        getContext: vi.fn().mockReturnValue(mockCtx),
+        toDataURL: vi.fn().mockReturnValue(createTestDataUrl(1920, 1080)),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation(() => mockCanvas as unknown as HTMLCanvasElement);
+
+      const result = await processScreenshotForDisplay(dataUrl, devicePixelRatio);
+
+      expect(result.displayWidth).toBe(1920);
+      expect(result.displayHeight).toBe(1080);
+      expect(result.devicePixelRatio).toBe(2);
+      expect(result.originalWidth).toBe(3840);
+      expect(result.originalHeight).toBe(2160);
     });
 
-    it('should correctly handle 1x DPR (no scaling)', () => {
-      const originalWidth = 1920;
-      const originalHeight = 1080;
-      const devicePixelRatio = 1;
+    it('should handle 1x DPR without scaling', async () => {
+      const { processScreenshotForDisplay } = await import('../../../src/lib/screenshot/processor');
+      const dataUrl = createTestDataUrl(1920, 1080);
 
-      const displayWidth = Math.round(originalWidth / devicePixelRatio);
-      const displayHeight = Math.round(originalHeight / devicePixelRatio);
+      const mockImage = {
+        width: 1920,
+        height: 1080,
+        complete: true,
+        src: '',
+        onload: null as ((this: HTMLImageElement) => void) | null,
+      };
 
-      expect(displayWidth).toBe(1920);
-      expect(displayHeight).toBe(1080);
+      vi.spyOn(global, 'Image').mockImplementation(() => {
+        const img = mockImage as unknown as HTMLImageElement;
+        setTimeout(() => img.onload?.(img), 0);
+        return img;
+      });
+
+      const mockCtx = {
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high' as const,
+        drawImage: vi.fn(),
+      };
+      const mockCanvas = {
+        width: 1920,
+        height: 1080,
+        getContext: vi.fn().mockReturnValue(mockCtx),
+        toDataURL: vi.fn().mockReturnValue(dataUrl),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation(() => mockCanvas as unknown as HTMLCanvasElement);
+
+      const result = await processScreenshotForDisplay(dataUrl, 1);
+
+      expect(result.displayWidth).toBe(1920);
+      expect(result.displayHeight).toBe(1080);
+      expect(result.devicePixelRatio).toBe(1);
     });
 
-    it('should correctly handle 3x DPR (mobile retina)', () => {
-      const originalWidth = 1170;
-      const originalHeight = 2532;
-      const devicePixelRatio = 3;
+    it('should use low quality setting when specified', async () => {
+      const { processScreenshotForDisplay } = await import('../../../src/lib/screenshot/processor');
+      const dataUrl = createTestDataUrl(1920, 1080);
 
-      const displayWidth = Math.round(originalWidth / devicePixelRatio);
-      const displayHeight = Math.round(originalHeight / devicePixelRatio);
+      const mockImage = {
+        width: 1920,
+        height: 1080,
+        complete: true,
+        src: '',
+        onload: null as ((this: HTMLImageElement) => void) | null,
+      };
 
-      expect(displayWidth).toBe(390);
-      expect(displayHeight).toBe(844);
+      vi.spyOn(global, 'Image').mockImplementation(() => {
+        const img = mockImage as unknown as HTMLImageElement;
+        setTimeout(() => img.onload?.(img), 0);
+        return img;
+      });
+
+      const mockCtx = {
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high' as const,
+        drawImage: vi.fn(),
+      };
+      const mockCanvas = {
+        width: 960,
+        height: 540,
+        getContext: vi.fn().mockReturnValue(mockCtx),
+        toDataURL: vi.fn().mockReturnValue(createTestDataUrl(960, 540)),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation(() => mockCanvas as unknown as HTMLCanvasElement);
+
+      const result = await processScreenshotForDisplay(dataUrl, 2, 'low');
+
+      expect(result.devicePixelRatio).toBe(2);
+    });
+
+    it('should throw error when canvas context is unavailable', async () => {
+      const { processScreenshotForDisplay } = await import('../../../src/lib/screenshot/processor');
+      const dataUrl = createTestDataUrl(1920, 1080);
+
+      const mockImage = {
+        width: 1920,
+        height: 1080,
+        complete: true,
+        src: '',
+        onload: null as ((this: HTMLImageElement) => void) | null,
+      };
+
+      vi.spyOn(global, 'Image').mockImplementation(() => {
+        const img = mockImage as unknown as HTMLImageElement;
+        setTimeout(() => img.onload?.(img), 0);
+        return img;
+      });
+
+      const mockCanvas = {
+        width: 1920,
+        height: 1080,
+        getContext: vi.fn().mockReturnValue(null),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation(() => mockCanvas as unknown as HTMLCanvasElement);
+
+      await expect(processScreenshotForDisplay(dataUrl, 1)).rejects.toThrow('Failed to get canvas context');
     });
   });
 
-  describe('aspect ratio calculations', () => {
-    it('should maintain 16:9 aspect ratio when scaling width', () => {
-      const originalWidth = 1920;
-      const originalHeight = 1080;
-      const targetWidth = 800;
+  describe('processScreenshotOriginal', () => {
+    it('should return original resolution without scaling', async () => {
+      const { processScreenshotOriginal } = await import('../../../src/lib/screenshot/processor');
+      const dataUrl = createTestDataUrl(3840, 2160);
 
-      const aspectRatio = originalWidth / originalHeight;
-      const calculatedHeight = Math.round(targetWidth / aspectRatio);
+      const mockImage = {
+        width: 3840,
+        height: 2160,
+        complete: true,
+        src: '',
+        onload: null as ((this: HTMLImageElement) => void) | null,
+      };
 
-      expect(calculatedHeight).toBe(450); // 800 / (1920/1080) = 800 / 1.777... = 450
-    });
+      vi.spyOn(global, 'Image').mockImplementation(() => {
+        const img = mockImage as unknown as HTMLImageElement;
+        setTimeout(() => img.onload?.(img), 0);
+        return img;
+      });
 
-    it('should maintain 4:3 aspect ratio when scaling width', () => {
-      const originalWidth = 1600;
-      const originalHeight = 1200;
-      const targetWidth = 400;
+      const result = await processScreenshotOriginal(dataUrl);
 
-      const aspectRatio = originalWidth / originalHeight;
-      const calculatedHeight = Math.round(targetWidth / aspectRatio);
-
-      expect(calculatedHeight).toBe(300); // 400 / (1600/1200) = 400 / 1.333... = 300
+      expect(result.displayWidth).toBe(3840);
+      expect(result.displayHeight).toBe(2160);
+      expect(result.originalWidth).toBe(3840);
+      expect(result.originalHeight).toBe(2160);
+      expect(result.devicePixelRatio).toBe(1);
+      expect(result.dataUrl).toBe(dataUrl);
     });
   });
 
-  describe('ProcessedScreenshot interface', () => {
-    it('should have correct structure', () => {
-      const mockResult = {
-        dataUrl: 'data:image/jpeg;base64,test123',
+  describe('scaleScreenshot', () => {
+    it('should scale to exact dimensions when both provided', async () => {
+      const { scaleScreenshot } = await import('../../../src/lib/screenshot/processor');
+      const dataUrl = createTestDataUrl(1920, 1080);
+
+      const mockImage = {
+        width: 1920,
+        height: 1080,
+        complete: true,
+        src: '',
+        onload: null as ((this: HTMLImageElement) => void) | null,
+      };
+
+      vi.spyOn(global, 'Image').mockImplementation(() => {
+        const img = mockImage as unknown as HTMLImageElement;
+        setTimeout(() => img.onload?.(img), 0);
+        return img;
+      });
+
+      const mockCtx = {
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high' as const,
+        drawImage: vi.fn(),
+      };
+      const mockCanvas = {
+        width: 800,
+        height: 600,
+        getContext: vi.fn().mockReturnValue(mockCtx),
+        toDataURL: vi.fn().mockReturnValue(createTestDataUrl(800, 600)),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation(() => mockCanvas as unknown as HTMLCanvasElement);
+
+      const result = await scaleScreenshot(dataUrl, 800, 600);
+
+      expect(result.displayWidth).toBe(800);
+      expect(result.displayHeight).toBe(600);
+    });
+
+    it('should maintain aspect ratio when only width provided', async () => {
+      const { scaleScreenshot } = await import('../../../src/lib/screenshot/processor');
+      const dataUrl = createTestDataUrl(1920, 1080);
+
+      const mockImage = {
+        width: 1920,
+        height: 1080,
+        complete: true,
+        src: '',
+        onload: null as ((this: HTMLImageElement) => void) | null,
+      };
+
+      vi.spyOn(global, 'Image').mockImplementation(() => {
+        const img = mockImage as unknown as HTMLImageElement;
+        setTimeout(() => img.onload?.(img), 0);
+        return img;
+      });
+
+      const mockCtx = {
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high' as const,
+        drawImage: vi.fn(),
+      };
+      const mockCanvas = {
+        width: 800,
+        height: 450,
+        getContext: vi.fn().mockReturnValue(mockCtx),
+        toDataURL: vi.fn().mockReturnValue(createTestDataUrl(800, 450)),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation(() => mockCanvas as unknown as HTMLCanvasElement);
+
+      const result = await scaleScreenshot(dataUrl, 800);
+
+      // 1920/1080 = 1.777..., 800/450 = 1.777...
+      expect(result.displayWidth).toBe(800);
+      expect(result.displayHeight).toBe(450);
+    });
+
+    it('should throw error when canvas context is unavailable', async () => {
+      const { scaleScreenshot } = await import('../../../src/lib/screenshot/processor');
+      const dataUrl = createTestDataUrl(1920, 1080);
+
+      const mockImage = {
+        width: 1920,
+        height: 1080,
+        complete: true,
+        src: '',
+        onload: null as ((this: HTMLImageElement) => void) | null,
+      };
+
+      vi.spyOn(global, 'Image').mockImplementation(() => {
+        const img = mockImage as unknown as HTMLImageElement;
+        setTimeout(() => img.onload?.(img), 0);
+        return img;
+      });
+
+      const mockCanvas = {
+        width: 800,
+        height: 600,
+        getContext: vi.fn().mockReturnValue(null),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation(() => mockCanvas as unknown as HTMLCanvasElement);
+
+      await expect(scaleScreenshot(dataUrl, 800, 600)).rejects.toThrow('Failed to get canvas context');
+    });
+  });
+
+  describe('getImageDimensions', () => {
+    it('should return dimensions for already loaded image', async () => {
+      const { getImageDimensions } = await import('../../../src/lib/screenshot/processor');
+
+      const mockImage = {
+        complete: true,
+        naturalWidth: 1920,
+        naturalHeight: 1080,
+        src: '',
+      };
+
+      vi.spyOn(global, 'Image').mockImplementation(() => mockImage as unknown as HTMLImageElement);
+
+      const dims = getImageDimensions(createTestDataUrl(1920, 1080));
+
+      expect(dims).toEqual({ width: 1920, height: 1080 });
+    });
+
+    it('should return null for not-yet-loaded image', async () => {
+      const { getImageDimensions } = await import('../../../src/lib/screenshot/processor');
+
+      const mockImage = {
+        complete: false,
+        naturalWidth: 0,
+        naturalHeight: 0,
+        src: '',
+      };
+
+      vi.spyOn(global, 'Image').mockImplementation(() => mockImage as unknown as HTMLImageElement);
+
+      const dims = getImageDimensions(createTestDataUrl(0, 0));
+
+      expect(dims).toBeNull();
+    });
+
+    it('should return null when naturalWidth is 0', async () => {
+      const { getImageDimensions } = await import('../../../src/lib/screenshot/processor');
+
+      const mockImage = {
+        complete: true,
+        naturalWidth: 0,
+        naturalHeight: 1080,
+        src: '',
+      };
+
+      vi.spyOn(global, 'Image').mockImplementation(() => mockImage as unknown as HTMLImageElement);
+
+      const dims = getImageDimensions(createTestDataUrl(0, 0));
+
+      expect(dims).toBeNull();
+    });
+  });
+
+  describe('ProcessedScreenshot interface compliance', () => {
+    it('should have all required properties', () => {
+      const validResult: ProcessedScreenshot = {
+        dataUrl: 'data:image/jpeg;base64,test',
         displayWidth: 1920,
         displayHeight: 1080,
         devicePixelRatio: 2,
@@ -93,54 +395,20 @@ describe('ScreenshotProcessor', () => {
         originalHeight: 2160,
       };
 
-      // Verify all required properties exist
-      expect(mockResult.dataUrl).toBeDefined();
-      expect(mockResult.displayWidth).toBeDefined();
-      expect(mockResult.displayHeight).toBeDefined();
-      expect(mockResult.devicePixelRatio).toBeDefined();
-      expect(mockResult.originalWidth).toBeDefined();
-      expect(mockResult.originalHeight).toBeDefined();
-
-      // Verify types
-      expect(typeof mockResult.dataUrl).toBe('string');
-      expect(typeof mockResult.displayWidth).toBe('number');
-      expect(typeof mockResult.displayHeight).toBe('number');
-      expect(typeof mockResult.devicePixelRatio).toBe('number');
-      expect(typeof mockResult.originalWidth).toBe('number');
-      expect(typeof mockResult.originalHeight).toBe('number');
-    });
-  });
-
-  describe('getImageDimensions', () => {
-    it('should parse data URL header for dimensions', async () => {
-      // Mock Image element behavior
-      const mockImage = {
-        complete: true,
-        naturalWidth: 1920,
-        naturalHeight: 1080,
-      };
-
-      vi.spyOn(global, 'Image').mockImplementation(() => mockImage as unknown as HTMLImageElement);
-
-      const { getImageDimensions } = await import('../../../src/lib/screenshot/processor');
-      const dims = getImageDimensions('data:image/jpeg;base64,test');
-
-      expect(dims).toEqual({ width: 1920, height: 1080 });
+      expect(validResult.dataUrl).toBeDefined();
+      expect(validResult.displayWidth).toBeDefined();
+      expect(validResult.displayHeight).toBeDefined();
+      expect(validResult.devicePixelRatio).toBeDefined();
+      expect(validResult.originalWidth).toBeDefined();
+      expect(validResult.originalHeight).toBeDefined();
     });
 
-    it('should return null for unloaded image', async () => {
-      const mockImage = {
-        complete: false,
-        naturalWidth: 0,
-        naturalHeight: 0,
-      };
+    it('should handle various quality settings', () => {
+      const qualitySettings = ['low', 'medium', 'high'] as const;
 
-      vi.spyOn(global, 'Image').mockImplementation(() => mockImage as unknown as HTMLImageElement);
-
-      const { getImageDimensions } = await import('../../../src/lib/screenshot/processor');
-      const dims = getImageDimensions('data:image/jpeg;base64,test');
-
-      expect(dims).toBeNull();
+      for (const quality of qualitySettings) {
+        expect(['low', 'medium', 'high']).toContain(quality);
+      }
     });
   });
 });

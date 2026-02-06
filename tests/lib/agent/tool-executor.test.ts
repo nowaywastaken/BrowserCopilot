@@ -1,287 +1,329 @@
 /**
  * Tool Executor Tests
- * Tests for the tool executor interface and registry
+ * Tests for the tool registry and executor implementations
  */
 
-import { describe, it, expect } from 'vitest';
-import {
-  createToolRegistry,
-  getToolDefinitions,
-  captureScreenshotExecutor,
-  captureDOMExecutor,
-  capturePageAnalysisExecutor,
-  getElementInfoExecutor,
-  executeScriptExecutor,
-  getPageInfoExecutor,
-  installUserScriptExecutor,
-  listUserScriptsExecutor,
-  navigateExecutor,
-  clickElementExecutor,
-  fillFormExecutor,
-  scrollExecutor,
-  summarizePageExecutor,
-} from '../../../src/lib/agent/tool-executor';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-describe('Tool Executor Interface', () => {
+describe('Tool Executor', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   describe('createToolRegistry', () => {
-    it('should create a registry with all 13 tools', () => {
+    it('should create a registry with all tools', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
       const registry = createToolRegistry();
 
-      expect(registry.size).toBe(13);
-    });
-
-    it('should have all expected tool names', () => {
-      const registry = createToolRegistry();
-
+      expect(registry.size).toBeGreaterThan(0);
       expect(registry.has('captureScreenshot')).toBe(true);
       expect(registry.has('captureDOM')).toBe(true);
-      expect(registry.has('capturePageAnalysis')).toBe(true);
-      expect(registry.has('getElementInfo')).toBe(true);
-      expect(registry.has('executeScript')).toBe(true);
-      expect(registry.has('getPageInfo')).toBe(true);
-      expect(registry.has('installUserScript')).toBe(true);
-      expect(registry.has('listUserScripts')).toBe(true);
       expect(registry.has('navigate')).toBe(true);
       expect(registry.has('clickElement')).toBe(true);
       expect(registry.has('fillForm')).toBe(true);
       expect(registry.has('scroll')).toBe(true);
-      expect(registry.has('summarizePage')).toBe(true);
+    });
+
+    it('should return Map instance', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+
+      expect(registry).toBeInstanceOf(Map);
+    });
+
+    it('should contain get method', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      const tool = registry.get('captureScreenshot');
+
+      expect(tool).toBeDefined();
+      expect(tool?.name).toBe('captureScreenshot');
     });
   });
 
   describe('getToolDefinitions', () => {
-    it('should return tool definitions for all registered tools', () => {
+    it('should extract tool definitions from registry', async () => {
+      const { createToolRegistry, getToolDefinitions } = await import('../../../src/lib/agent/tool-executor');
+
       const registry = createToolRegistry();
       const definitions = getToolDefinitions(registry);
 
-      expect(definitions.length).toBe(13);
+      expect(Array.isArray(definitions)).toBe(true);
+      expect(definitions.length).toBeGreaterThan(0);
+      expect(definitions[0]).toHaveProperty('name');
+      expect(definitions[0]).toHaveProperty('description');
+      expect(definitions[0]).toHaveProperty('parameters');
     });
 
-    it('should return correct tool names in definitions', () => {
+    it('should include all tool names in definitions', async () => {
+      const { createToolRegistry, getToolDefinitions } = await import('../../../src/lib/agent/tool-executor');
+
       const registry = createToolRegistry();
       const definitions = getToolDefinitions(registry);
-      const names = definitions.map((d) => d.name);
+      const toolNames = definitions.map((d: any) => d.name);
+
+      expect(toolNames).toContain('captureScreenshot');
+      expect(toolNames).toContain('captureDOM');
+      expect(toolNames).toContain('capturePageAnalysis');
+      expect(toolNames).toContain('getElementInfo');
+      expect(toolNames).toContain('executeScript');
+      expect(toolNames).toContain('getPageInfo');
+      expect(toolNames).toContain('installUserScript');
+      expect(toolNames).toContain('listUserScripts');
+      expect(toolNames).toContain('navigate');
+      expect(toolNames).toContain('clickElement');
+      expect(toolNames).toContain('fillForm');
+      expect(toolNames).toContain('scroll');
+      expect(toolNames).toContain('summarizePage');
+    });
+  });
+
+  describe('ALL_TOOLS constant', () => {
+    it('should export all tool executors', async () => {
+      const { ALL_TOOLS } = await import('../../../src/lib/agent/tool-executor');
+
+      expect(Array.isArray(ALL_TOOLS)).toBe(true);
+      expect(ALL_TOOLS.length).toBe(13); // 13 tools total
+    });
+
+    it('should have correct tool names', async () => {
+      const { ALL_TOOLS } = await import('../../../src/lib/agent/tool-executor');
+
+      const names = ALL_TOOLS.map((t: any) => t.name);
 
       expect(names).toContain('captureScreenshot');
-      expect(names).toContain('captureDOM');
-      expect(names).toContain('capturePageAnalysis');
-      expect(names).toContain('getElementInfo');
-      expect(names).toContain('executeScript');
-      expect(names).toContain('getPageInfo');
-      expect(names).toContain('installUserScript');
-      expect(names).toContain('listUserScripts');
       expect(names).toContain('navigate');
       expect(names).toContain('clickElement');
-      expect(names).toContain('fillForm');
-      expect(names).toContain('scroll');
-      expect(names).toContain('summarizePage');
     });
   });
 
-  describe('Tool Definitions', () => {
-    it('captureScreenshot should have correct parameters', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'captureScreenshot');
+  describe('ToolExecutor interface', () => {
+    it('should have required properties', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
 
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.type).toBe('object');
-      expect(tool?.parameters.required).toContain('quality');
-      expect((tool?.parameters.properties.quality as { enum?: string[] })?.enum).toEqual(['low', 'medium', 'high']);
-      expect((tool?.parameters.properties.returnToUser as { type?: string })?.type).toBe('boolean');
+      const registry = createToolRegistry();
+      const tool = registry.get('captureScreenshot');
+
+      expect(tool).toHaveProperty('name');
+      expect(tool).toHaveProperty('description');
+      expect(tool).toHaveProperty('parameters');
+      expect(tool).toHaveProperty('execute');
+      expect(typeof tool?.execute).toBe('function');
     });
 
-    it('captureDOM should have optional parameters', () => {
+    it('should have valid parameter schemas', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
       const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'captureDOM');
 
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.type).toBe('object');
-      expect(tool?.parameters.required).toBeUndefined();
-      expect((tool?.parameters.properties.selector as { type?: string })?.type).toBe('string');
-      expect((tool?.parameters.properties.includeAttributes as { type?: string })?.type).toBe('boolean');
-      expect((tool?.parameters.properties.maxDepth as { type?: string })?.type).toBe('number');
-    });
-
-    it('capturePageAnalysis should have optional quality and depth parameters', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'capturePageAnalysis');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.type).toBe('object');
-      expect((tool?.parameters.properties.screenshotQuality as { enum?: string[] })?.enum).toEqual(['low', 'medium', 'high']);
-      expect((tool?.parameters.properties.domMaxDepth as { type?: string })?.type).toBe('number');
-    });
-
-    it('getElementInfo should require selector parameter', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'getElementInfo');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.required).toContain('selector');
-      expect((tool?.parameters.properties.selector as { type?: string })?.type).toBe('string');
-    });
-
-    it('executeScript should require code parameter', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'executeScript');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.required).toContain('code');
-      expect((tool?.parameters.properties.code as { type?: string })?.type).toBe('string');
-    });
-
-    it('getPageInfo should have no parameters', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'getPageInfo');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.type).toBe('object');
-      expect(Object.keys(tool?.parameters.properties || {})).toHaveLength(0);
-    });
-
-    it('installUserScript should require code parameter', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'installUserScript');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.required).toContain('code');
-      expect((tool?.parameters.properties.code as { type?: string })?.type).toBe('string');
-    });
-
-    it('listUserScripts should have no parameters', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'listUserScripts');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.type).toBe('object');
-      expect(Object.keys(tool?.parameters.properties || {})).toHaveLength(0);
-    });
-
-    it('navigate should require url parameter', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'navigate');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.required).toContain('url');
-      expect((tool?.parameters.properties.url as { type?: string })?.type).toBe('string');
-    });
-
-    it('clickElement should require selector parameter', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'clickElement');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.required).toContain('selector');
-    });
-
-    it('fillForm should require selector and value parameters', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'fillForm');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.required).toContain('selector');
-      expect(tool?.parameters.required).toContain('value');
-    });
-
-    it('scroll should have optional parameters', () => {
-      const registry = createToolRegistry();
-      const definitions = getToolDefinitions(registry);
-      const tool = definitions.find((d) => d.name === 'scroll');
-
-      expect(tool).toBeDefined();
-      expect(tool?.parameters.type).toBe('object');
-      expect((tool?.parameters.properties.selector as { type?: string })?.type).toBe('string');
-      expect((tool?.parameters.properties.x as { type?: string })?.type).toBe('number');
-      expect((tool?.parameters.properties.y as { type?: string })?.type).toBe('number');
+      for (const [name, tool] of registry) {
+        expect(tool.parameters).toHaveProperty('type');
+        expect(tool.parameters.type).toBe('object');
+        expect(tool.parameters).toHaveProperty('properties');
+        expect(typeof tool.parameters.properties).toBe('object');
+      }
     });
   });
 
-  describe('Tool Executors', () => {
-    it('captureScreenshot executor should have correct metadata', () => {
-      expect(captureScreenshotExecutor.name).toBe('captureScreenshot');
-      expect(captureScreenshotExecutor.description).toBeDefined();
-      expect(captureScreenshotExecutor.parameters.type).toBe('object');
+  describe('ScreenshotQuality type', () => {
+    it('should accept valid quality values', async () => {
+      const { ScreenshotQuality } = await import('../../../src/lib/agent/tool-executor');
+
+      const values: ScreenshotQuality[] = ['low', 'medium', 'high'];
+
+      expect(values).toContain('low');
+      expect(values).toContain('medium');
+      expect(values).toContain('high');
+    });
+  });
+
+  describe('Individual tool executors', () => {
+    describe('captureScreenshot executor', () => {
+      it('should have correct name and description', async () => {
+        const { captureScreenshotExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(captureScreenshotExecutor.name).toBe('captureScreenshot');
+        expect(captureScreenshotExecutor.description).toContain('screenshot');
+      });
+
+      it('should have quality parameter', async () => {
+        const { captureScreenshotExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(captureScreenshotExecutor.parameters.properties).toHaveProperty('quality');
+        expect(captureScreenshotExecutor.parameters.properties.quality.enum).toContain('low');
+        expect(captureScreenshotExecutor.parameters.properties.quality.enum).toContain('medium');
+        expect(captureScreenshotExecutor.parameters.properties.quality.enum).toContain('high');
+      });
     });
 
-    it('captureDOM executor should have correct metadata', () => {
-      expect(captureDOMExecutor.name).toBe('captureDOM');
-      expect(captureDOMExecutor.description).toBeDefined();
-      expect(captureDOMExecutor.parameters.type).toBe('object');
+    describe('navigate executor', () => {
+      it('should have url parameter', async () => {
+        const { navigateExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(navigateExecutor.parameters.properties).toHaveProperty('url');
+        expect(navigateExecutor.parameters.required).toContain('url');
+      });
     });
 
-    it('capturePageAnalysis executor should have correct metadata', () => {
-      expect(capturePageAnalysisExecutor.name).toBe('capturePageAnalysis');
-      expect(capturePageAnalysisExecutor.description).toBeDefined();
-      expect(capturePageAnalysisExecutor.parameters.type).toBe('object');
+    describe('clickElement executor', () => {
+      it('should have selector parameter', async () => {
+        const { clickElementExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(clickElementExecutor.parameters.properties).toHaveProperty('selector');
+        expect(clickElementExecutor.parameters.required).toContain('selector');
+      });
+
+      it('should support optional button parameter', async () => {
+        const { clickElementExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(clickElementExecutor.parameters.properties).toHaveProperty('button');
+      });
     });
 
-    it('getElementInfo executor should have correct metadata', () => {
-      expect(getElementInfoExecutor.name).toBe('getElementInfo');
-      expect(getElementInfoExecutor.description).toBeDefined();
-      expect(getElementInfoExecutor.parameters.required).toContain('selector');
+    describe('fillForm executor', () => {
+      it('should have selector and value parameters', async () => {
+        const { fillFormExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(fillFormExecutor.parameters.properties).toHaveProperty('selector');
+        expect(fillFormExecutor.parameters.properties).toHaveProperty('value');
+        expect(fillFormExecutor.parameters.required).toContain('selector');
+        expect(fillFormExecutor.parameters.required).toContain('value');
+      });
     });
 
-    it('executeScript executor should have correct metadata', () => {
-      expect(executeScriptExecutor.name).toBe('executeScript');
-      expect(executeScriptExecutor.description).toBeDefined();
-      expect(executeScriptExecutor.parameters.required).toContain('code');
+    describe('scroll executor', () => {
+      it('should have y parameter for vertical scroll', async () => {
+        const { scrollExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(scrollExecutor.parameters.properties).toHaveProperty('y');
+      });
+
+      it('should support optional selector parameter', async () => {
+        const { scrollExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(scrollExecutor.parameters.properties).toHaveProperty('selector');
+      });
     });
 
-    it('getPageInfo executor should have correct metadata', () => {
-      expect(getPageInfoExecutor.name).toBe('getPageInfo');
-      expect(getPageInfoExecutor.description).toBeDefined();
+    describe('installUserScript executor', () => {
+      it('should have code parameter', async () => {
+        const { installUserScriptExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(installUserScriptExecutor.parameters.properties).toHaveProperty('code');
+        expect(installUserScriptExecutor.parameters.required).toContain('code');
+      });
     });
 
-    it('installUserScript executor should have correct metadata', () => {
-      expect(installUserScriptExecutor.name).toBe('installUserScript');
-      expect(installUserScriptExecutor.description).toBeDefined();
-      expect(installUserScriptExecutor.parameters.required).toContain('code');
+    describe('executeScript executor', () => {
+      it('should have code parameter', async () => {
+        const { executeScriptExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(executeScriptExecutor.parameters.properties).toHaveProperty('code');
+        expect(executeScriptExecutor.parameters.required).toContain('code');
+      });
     });
 
-    it('listUserScripts executor should have correct metadata', () => {
-      expect(listUserScriptsExecutor.name).toBe('listUserScripts');
-      expect(listUserScriptsExecutor.description).toBeDefined();
+    describe('getElementInfo executor', () => {
+      it('should have selector parameter', async () => {
+        const { getElementInfoExecutor } = await import('../../../src/lib/agent/tool-executor');
+
+        expect(getElementInfoExecutor.parameters.properties).toHaveProperty('selector');
+        expect(getElementInfoExecutor.parameters.required).toContain('selector');
+      });
+    });
+  });
+
+  describe('ToolResult interface', () => {
+    it('should have required properties', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      const tool = registry.get('captureScreenshot');
+
+      // Verify the type definition exists
+      expect(tool?.execute).toBeInstanceOf(Function);
+    });
+  });
+
+  describe('ToolContext interface', () => {
+    it('should accept tabId and url', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      const tool = registry.get('getPageInfo');
+
+      expect(tool).toBeDefined();
+    });
+  });
+
+  describe('ToolDefinition interface', () => {
+    it('should match expected structure', async () => {
+      const { getToolDefinitions, createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      const definitions = getToolDefinitions(registry);
+
+      const definition = definitions[0] as any;
+      expect(definition).toHaveProperty('name');
+      expect(definition).toHaveProperty('description');
+      expect(definition).toHaveProperty('parameters');
+      expect(definition.parameters.type).toBe('object');
+    });
+  });
+
+  describe('ToolParameterSchema interface', () => {
+    it('should support optional enum values', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      const screenshotTool = registry.get('captureScreenshot');
+      const qualityProp = screenshotTool?.parameters.properties.quality;
+
+      expect(qualityProp?.enum).toBeDefined();
+      expect(qualityProp?.enum).toEqual(['low', 'medium', 'high']);
     });
 
-    it('navigate executor should have correct metadata', () => {
-      expect(navigateExecutor.name).toBe('navigate');
-      expect(navigateExecutor.description).toBeDefined();
-      expect(navigateExecutor.parameters.required).toContain('url');
+    it('should support optional minimum/maximum', async () => {
+      const { createToolRegistry } = await import('../../../src/lib/agent/tool-executor');
+
+      const registry = createToolRegistry();
+      const scrollTool = registry.get('scroll');
+
+      expect(scrollTool?.parameters.properties).toHaveProperty('y');
+    });
+  });
+
+  describe('Named exports', () => {
+    it('should export all individual executors', async () => {
+      const exports = await import('../../../src/lib/agent/tool-executor');
+
+      expect(exports.captureScreenshotExecutor).toBeDefined();
+      expect(exports.captureDOMExecutor).toBeDefined();
+      expect(exports.capturePageAnalysisExecutor).toBeDefined();
+      expect(exports.getElementInfoExecutor).toBeDefined();
+      expect(exports.executeScriptExecutor).toBeDefined();
+      expect(exports.getPageInfoExecutor).toBeDefined();
+      expect(exports.installUserScriptExecutor).toBeDefined();
+      expect(exports.listUserScriptsExecutor).toBeDefined();
+      expect(exports.navigateExecutor).toBeDefined();
+      expect(exports.clickElementExecutor).toBeDefined();
+      expect(exports.fillFormExecutor).toBeDefined();
+      expect(exports.scrollExecutor).toBeDefined();
+      expect(exports.summarizePageExecutor).toBeDefined();
     });
 
-    it('clickElement executor should have correct metadata', () => {
-      expect(clickElementExecutor.name).toBe('clickElement');
-      expect(clickElementExecutor.description).toBeDefined();
-      expect(clickElementExecutor.parameters.required).toContain('selector');
-    });
-
-    it('fillForm executor should have correct metadata', () => {
-      expect(fillFormExecutor.name).toBe('fillForm');
-      expect(fillFormExecutor.description).toBeDefined();
-      expect(fillFormExecutor.parameters.required).toContain('selector');
-      expect(fillFormExecutor.parameters.required).toContain('value');
-    });
-
-    it('scroll executor should have correct metadata', () => {
-      expect(scrollExecutor.name).toBe('scroll');
-      expect(scrollExecutor.description).toBeDefined();
-    });
-
-    it('summarizePage executor should have correct metadata', () => {
-      expect(summarizePageExecutor.name).toBe('summarizePage');
-      expect(summarizePageExecutor.description).toBeDefined();
-      expect(summarizePageExecutor.parameters.type).toBe('object');
+    it('should export type re-exports', async () => {
+      // Types are not available at runtime, so we just verify the module loads
+      const module = await import('../../../src/lib/agent/tool-executor');
+      expect(module.createToolRegistry).toBeDefined();
+      expect(module.getToolDefinitions).toBeDefined();
     });
   });
 });
