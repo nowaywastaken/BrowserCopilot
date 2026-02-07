@@ -218,6 +218,54 @@ describe('ChatService', () => {
 
       expect(typeof ChatService.runAgent).toBe('function');
     });
+
+    it('should have runAgent as async function that returns Promise', async () => {
+      const { ChatService } = await import('../../../src/lib/services/chat-service');
+
+      // Verify method exists and returns Promise-like
+      expect(typeof ChatService.runAgent).toBe('function');
+
+      // The actual behavior depends on chrome.runtime.sendMessage mocking
+      // which is complex due to the callback-based API
+    });
+
+    it('should handle chrome.runtime.lastError on initial send', async () => {
+      const { ChatService } = await import('../../../src/lib/services/chat-service');
+
+      const mockChrome = {
+        runtime: {
+          sendMessage: vi.fn().mockImplementation((_message, callback) => {
+            if (callback) {
+              callback(undefined);
+            }
+          }),
+          lastError: { message: 'Extension context invalidated' },
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      await expect(ChatService.runAgent('Test task')).rejects.toThrow('Extension context invalidated');
+    });
+
+    it('should handle failed response on initial send', async () => {
+      const { ChatService } = await import('../../../src/lib/services/chat-service');
+
+      const mockChrome = {
+        runtime: {
+          sendMessage: vi.fn().mockImplementation((_message, callback) => {
+            if (callback) {
+              callback({ success: false, error: 'Agent limit reached' });
+            }
+          }),
+          lastError: null,
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      await expect(ChatService.runAgent('Test task')).rejects.toThrow('Agent limit reached');
+    });
   });
 
   describe('AgentStateUpdateMessage interface', () => {

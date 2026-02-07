@@ -186,4 +186,200 @@ describe('ScreenshotCapture', () => {
       expect(high).toBeLessThanOrEqual(100);
     });
   });
+
+  describe('error handling', () => {
+    it('should return error when device info fails to load', async () => {
+      const mockChrome = {
+        tabs: {
+          query: vi.fn().mockResolvedValue([{ id: 404, active: true, windowId: 7 }]),
+          captureVisibleTab: vi.fn().mockResolvedValue('data:image/jpeg;base64,test'),
+        },
+        scripting: {
+          executeScript: vi.fn().mockResolvedValue([{ result: null }]),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+      const result = await captureScreenshot({});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to get device info');
+    });
+
+    it('should return error when captureVisibleTab throws exception', async () => {
+      const mockChrome = {
+        tabs: {
+          query: vi.fn().mockResolvedValue([{ id: 505, active: true, windowId: 8 }]),
+          captureVisibleTab: vi.fn().mockRejectedValue(new Error('Capture failed: tab not found')),
+        },
+        scripting: {
+          executeScript: vi.fn().mockResolvedValue([{ result: { devicePixelRatio: 1, width: 1920, height: 1080 } }]),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+      const result = await captureScreenshot({});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Screenshot capture failed');
+    });
+
+    it('should handle unknown error types gracefully', async () => {
+      const mockChrome = {
+        tabs: {
+          query: vi.fn().mockResolvedValue([{ id: 606, active: true, windowId: 9 }]),
+          captureVisibleTab: vi.fn().mockRejectedValue('String error instead of Error object'),
+        },
+        scripting: {
+          executeScript: vi.fn().mockResolvedValue([{ result: { devicePixelRatio: 1, width: 1920, height: 1080 } }]),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+      const result = await captureScreenshot({});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Screenshot capture failed');
+    });
+
+    it('should handle executeScript throwing exception', async () => {
+      const mockChrome = {
+        tabs: {
+          query: vi.fn().mockResolvedValue([{ id: 707, active: true, windowId: 10 }]),
+          captureVisibleTab: vi.fn().mockResolvedValue('data:image/jpeg;base64,test'),
+        },
+        scripting: {
+          executeScript: vi.fn().mockRejectedValue(new Error('Scripting permission denied')),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+      const result = await captureScreenshot({});
+
+      // When executeScript fails, it falls back to default device info, so capture succeeds
+      // The fallback returns { width: 0, height: 0, devicePixelRatio: 1 }
+      expect(result.success).toBe(true);
+    });
+
+    it('should handle empty results array from executeScript', async () => {
+      const mockChrome = {
+        tabs: {
+          query: vi.fn().mockResolvedValue([{ id: 808, active: true, windowId: 11 }]),
+          captureVisibleTab: vi.fn().mockResolvedValue('data:image/jpeg;base64,test'),
+        },
+        scripting: {
+          executeScript: vi.fn().mockResolvedValue([]),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+      const result = await captureScreenshot({});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to get device info');
+    });
+
+    it('should handle undefined result in executeScript response', async () => {
+      const mockChrome = {
+        tabs: {
+          query: vi.fn().mockResolvedValue([{ id: 909, active: true, windowId: 12 }]),
+          captureVisibleTab: vi.fn().mockResolvedValue('data:image/jpeg;base64,test'),
+        },
+        scripting: {
+          executeScript: vi.fn().mockResolvedValue([undefined]),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+      const result = await captureScreenshot({});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to get device info');
+    });
+  });
+
+  describe('ScreeshotResult structure', () => {
+    it('should have correct structure on success', async () => {
+      const mockChrome = {
+        tabs: {
+          query: vi.fn().mockResolvedValue([{ id: 1001, active: true, windowId: 13 }]),
+          captureVisibleTab: vi.fn().mockResolvedValue('data:image/jpeg;base64,success'),
+        },
+        scripting: {
+          executeScript: vi.fn().mockResolvedValue([{ result: { devicePixelRatio: 2, width: 1280, height: 720 } }]),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+      const result = await captureScreenshot({});
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBeDefined();
+      expect(result.data!.dataUrl).toBe('data:image/jpeg;base64,success');
+      expect(result.data!.width).toBe(1280);
+      expect(result.data!.height).toBe(720);
+      expect(result.data!.devicePixelRatio).toBe(2);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should have correct structure on failure', async () => {
+      const mockChrome = {
+        tabs: {
+          query: vi.fn().mockResolvedValue([]),
+        },
+        scripting: {
+          executeScript: vi.fn(),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+      const result = await captureScreenshot({});
+
+      expect(result.success).toBe(false);
+      expect(result.data).toBeUndefined();
+      expect(result.error).toBeDefined();
+    });
+  });
+
+  describe('device pixel ratio handling', () => {
+    it('should handle various DPR values correctly', async () => {
+      const dprValues = [1, 1.5, 2, 3, 4];
+
+      for (const dpr of dprValues) {
+        const mockChrome = {
+          tabs: {
+            query: vi.fn().mockResolvedValue([{ id: 1000 + dpr, active: true, windowId: dpr * 10 }]),
+            captureVisibleTab: vi.fn().mockResolvedValue(`data:image/jpeg;base64,dpr${dpr}`),
+          },
+          scripting: {
+            executeScript: vi.fn().mockResolvedValue([{ result: { devicePixelRatio: dpr, width: 1920, height: 1080 } }]),
+          },
+        };
+
+        vi.stubGlobal('chrome', mockChrome);
+
+        const { captureScreenshot } = await import('../../../src/lib/screenshot/capture');
+        const result = await captureScreenshot({});
+
+        expect(result.success).toBe(true);
+        expect(result.data!.devicePixelRatio).toBe(dpr);
+      }
+    });
+  });
 });
