@@ -24,7 +24,6 @@ describe('UserScript Installer', () => {
         'https://example.com/*'
       );
 
-      // Check required headers
       expect(template).toContain('// ==UserScript==');
       expect(template).toContain('// @name        Test Script');
       expect(template).toContain('// @namespace   http://tampermonkey.net/');
@@ -34,8 +33,6 @@ describe('UserScript Installer', () => {
       expect(template).toContain('// @grant       none');
       expect(template).toContain('// @run-at      document-idle');
       expect(template).toContain('// ==/UserScript==');
-
-      // Check IIFE structure
       expect(template).toContain("(function() {");
       expect(template).toContain("'use strict';");
       expect(template).toContain("})();");
@@ -54,7 +51,6 @@ describe('UserScript Installer', () => {
 
       const template = createScriptTemplate('Test <>&"\' Script', 'Description');
 
-      // The template should include the name as-is (UserScript doesn't require escaping in @name)
       expect(template).toContain('// @name        Test <>&"\' Script');
     });
   });
@@ -89,7 +85,6 @@ describe('UserScript Installer', () => {
 })();
 `;
 
-      // Mock chrome.userScripts
       const mockScripts = [{ id: 'test-id-123', name: 'Test Script' }];
       const mockChrome = {
         userScripts: {
@@ -196,14 +191,14 @@ describe('UserScript Installer', () => {
       expect(registeredRunAt).toBe('document-end');
     });
 
-    it('should handle chrome runtime error', async () => {
+    it('should handle chrome.userScripts.register throwing error', async () => {
       const { installUserScript } = await import('../../../src/lib/userscript/installer');
 
       const validScript = `// ==UserScript==
-// @name         Test Script
+// @name         Error Test
 // @namespace    http://tampermonkey.net/
 // @version      1.0
-// @description  Test
+// @description  Error test
 // @match        https://example.com/*
 // @grant        none
 // ==/UserScript==
@@ -215,12 +210,8 @@ describe('UserScript Installer', () => {
 
       const mockChrome = {
         userScripts: {
-          register: vi.fn((_scripts, callback) => {
-            // Simulate error by calling callback with error
-            setTimeout(() => callback(), 0);
-          }),
-          getScripts: vi.fn((callback) => {
-            callback([]);
+          register: vi.fn((_scripts, _callback) => {
+            throw new Error('Registration failed');
           }),
         },
       };
@@ -231,8 +222,43 @@ describe('UserScript Installer', () => {
         code: validScript,
       });
 
-      expect(result.success).toBe(true);
-      expect(result.scriptId).toBeUndefined(); // No script found in empty array
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Registration failed');
+    });
+
+    it('should handle non-Error thrown during registration', async () => {
+      const { installUserScript } = await import('../../../src/lib/userscript/installer');
+
+      const validScript = `// ==UserScript==
+// @name         Non-Error Test
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Non-error test
+// @match        https://example.com/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+  'use strict';
+})();
+`;
+
+      const mockChrome = {
+        userScripts: {
+          register: vi.fn((_scripts, _callback) => {
+            throw 123;
+          }),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const result = await installUserScript({
+        code: validScript,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to install script');
     });
   });
 
@@ -258,11 +284,44 @@ describe('UserScript Installer', () => {
       expect(result.scriptId).toBe('script-123');
     });
 
-    it('should handle update error gracefully', async () => {
+    it('should handle update error when chrome.userScripts.update throws', async () => {
       const { updateUserScript } = await import('../../../src/lib/userscript/installer');
 
-      // The function should be callable
-      expect(typeof updateUserScript).toBe('function');
+      const mockChrome = {
+        userScripts: {
+          update: vi.fn((_options, _callback) => {
+            throw new Error('Update failed');
+          }),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const result = await updateUserScript('script-123', {
+        code: 'updated code',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Update failed');
+    });
+
+    it('should handle non-Error thrown in update', async () => {
+      const { updateUserScript } = await import('../../../src/lib/userscript/installer');
+
+      const mockChrome = {
+        userScripts: {
+          update: vi.fn((_options, _callback) => {
+            throw 'Unknown error';
+          }),
+        },
+      };
+
+      vi.stubGlobal('chrome', mockChrome);
+
+      const result = await updateUserScript('script-123', {});
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to update script');
     });
 
     it('should only update specified options', async () => {
@@ -287,7 +346,7 @@ describe('UserScript Installer', () => {
 
       expect(updatedOptions.ids).toEqual(['script-123']);
       expect(updatedOptions.matches).toEqual(['https://new.com/*']);
-      expect(updatedOptions.code).toBeUndefined(); // Not provided
+      expect(updatedOptions.code).toBeUndefined();
     });
   });
 
