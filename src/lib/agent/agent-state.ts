@@ -350,15 +350,6 @@ export function shouldContinue(state: AgentState, maxIterations: number): boolea
 }
 
 /**
- * Checks if the current phase is terminal
- * @param phase - The phase to check
- * @returns True if phase is terminal
- */
-export function isTerminalPhase(phase: AgentPhase): boolean {
-  return ['completed', 'failed'].includes(phase);
-}
-
-/**
  * Returns the Chinese display name for a phase
  * @param phase - The phase to get display name for
  * @returns Chinese display name
@@ -375,35 +366,3 @@ export function getPhaseDisplayName(phase: AgentPhase): string {
   return displayNames[phase];
 }
 
-/**
- * Gets a summary of the agent's current state
- * @param state - Current agent state
- * @returns Summary object with key state information
- */
-export function getAgentSummary(state: AgentState): {
-  task: string;
-  phase: string;
-  iterations: number;
-  toolCallsCount: number;
-  success: boolean | null;
-  displayName: string;
-  duration: number;
-} {
-  const duration = state.completedAt
-    ? state.completedAt - state.startedAt
-    : Date.now() - state.startedAt;
-
-  // Determine success based on phase
-  // completed -> true, failed or non-terminal -> false
-  const success: boolean | null = state.phase === 'completed' ? true : false;
-
-  return {
-    task: state.task,
-    phase: state.phase,
-    iterations: state.iterations,
-    toolCallsCount: state.toolCalls.length,
-    success,
-    displayName: getPhaseDisplayName(state.phase),
-    duration,
-  };
-}

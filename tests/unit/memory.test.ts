@@ -249,3 +249,91 @@ describe('Apple Silicon Detection', () => {
     expect(isAppleSilicon(appleSiliconUA)).toBe(false);
   });
 });
+
+// ============================================================================
+// LocalMemoryManager Tests
+// ============================================================================
+
+// Mock dependencies
+vi.mock('idb-keyval', () => ({
+  get: vi.fn(),
+  set: vi.fn(),
+  del: vi.fn(),
+  createStore: vi.fn().mockReturnValue({}),
+}));
+
+vi.mock('langchain/vectorstores/memory', () => ({
+  MemoryVectorStore: vi.fn().mockImplementation(() => ({
+    addDocuments: vi.fn().mockResolvedValue(undefined),
+    similaritySearch: vi.fn().mockResolvedValue([]),
+    delete: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+vi.mock('@langchain/openai', () => ({
+  OpenAIEmbeddings: vi.fn().mockImplementation(() => ({
+    embedQuery: vi.fn().mockResolvedValue(new Array(1536).fill(0)),
+    embedDocuments: vi.fn().mockResolvedValue([[]]),
+  })),
+}));
+
+vi.mock('@langchain/core/documents', () => ({
+  Document: vi.fn().mockImplementation((content: string) => ({
+    pageContent: content,
+    metadata: {},
+  })),
+}));
+
+describe('LocalMemoryManager', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('constructor', () => {
+    it('should throw error when API key is missing', async () => {
+      const { LocalMemoryManager } = await import('../../src/lib/memory');
+
+      expect(() => {
+        new LocalMemoryManager({ apiKey: '' });
+      }).toThrow('API Key 是必需的');
+    });
+
+    it('should throw error when API key is undefined', async () => {
+      const { LocalMemoryManager } = await import('../../src/lib/memory');
+
+      expect(() => {
+        new LocalMemoryManager({ apiKey: undefined as unknown as string });
+      }).toThrow('API Key 是必需的');
+    });
+
+    it('should accept valid configuration', async () => {
+      const { LocalMemoryManager } = await import('../../src/lib/memory');
+
+      const manager = new LocalMemoryManager({ apiKey: 'test-key' });
+
+      expect(manager).toBeDefined();
+    });
+
+    it('should use custom configuration options', async () => {
+      const { LocalMemoryManager } = await import('../../src/lib/memory');
+
+      const manager = new LocalMemoryManager({
+        apiKey: 'test-key',
+        embeddingModel: 'text-embedding-3-large',
+        similarityK: 10,
+        maxMemories: 1000,
+      });
+
+      expect(manager).toBeDefined();
+    });
+  });
+
+  describe('module exports', () => {
+    it('should export LocalMemoryManager class', async () => {
+      const module = await import('../../src/lib/memory');
+
+      expect(module.LocalMemoryManager).toBeDefined();
+      expect(typeof module.LocalMemoryManager).toBe('function');
+    });
+  });
+});

@@ -145,13 +145,3 @@ async function getDeviceInfo(tabId: number): Promise<DeviceInfo | null> {
     };
   }
 }
-
-/**
- * Validates that the screenshot data URL is properly formatted
- *
- * @param dataUrl - The data URL to validate
- * @returns true if valid, false otherwise
- */
-export function isValidDataUrl(dataUrl: string): boolean {
-  return dataUrl.startsWith('data:image/') && dataUrl.includes('base64,');
-}

@@ -160,6 +160,27 @@ console.log('Hello');`;
       expect(result.scripts).toHaveLength(2);
       expect(result.scripts?.[0].name).toBe('Script 1');
     });
+
+    it('should handle error when getScripts throws', async () => {
+      mockUserScripts.getScripts.mockImplementation(() => {
+        throw new Error('Failed to get scripts');
+      });
+
+      const result = await listUserScripts();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to get scripts');
+      expect(result.scripts).toEqual([]);
+    });
+
+    it('should handle unknown error type', async () => {
+      mockUserScripts.getScripts.mockImplementation(() => {
+        throw 123; // Non-error type
+      });
+
+      const result = await listUserScripts();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to list scripts');
+    });
   });
 
   describe('enableScript', () => {
@@ -181,6 +202,16 @@ console.log('Hello');`;
       expect(result.success).toBe(false);
       expect(result.error).toBe('Update failed');
     });
+
+    it('should handle unknown error type', async () => {
+      mockUserScripts.update.mockImplementation(() => {
+        throw null; // Unknown error type
+      });
+
+      const result = await enableScript('script1');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to enable script');
+    });
   });
 
   describe('disableScript', () => {
@@ -191,6 +222,26 @@ console.log('Hello');`;
 
       const result = await disableScript('script1');
       expect(result.success).toBe(true);
+    });
+
+    it('should handle errors', async () => {
+      mockUserScripts.update.mockImplementation(() => {
+        throw new Error('Update failed');
+      });
+
+      const result = await disableScript('script1');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Update failed');
+    });
+
+    it('should handle unknown error type', async () => {
+      mockUserScripts.update.mockImplementation(() => {
+        throw 'error'; // Unknown error type
+      });
+
+      const result = await disableScript('script1');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to disable script');
     });
   });
 

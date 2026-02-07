@@ -312,4 +312,90 @@ describe('IntentDetector', () => {
       expect(result.requiresAgent).toBe(true);
     });
   });
+
+  describe('Detailed task type patterns', () => {
+    it('should identify script generation from "写" keyword', () => {
+      const result = detectIntentSync('写一个自动填表的脚本');
+      expect(result.requiresAgent).toBe(true);
+      expect(result.taskType).toBe('script');
+    });
+
+    it('should identify script generation from "创建" keyword', () => {
+      const result = detectIntentSync('创建一个Tampermonkey脚本');
+      expect(result.requiresAgent).toBe(true);
+      expect(result.taskType).toBe('script');
+    });
+
+    it('should identify DOM extraction from "获取" keyword', () => {
+      const result = detectIntentSync('获取页面结构');
+      expect(result.requiresAgent).toBe(true);
+    });
+
+    it('should identify page interaction from "点击" keyword', () => {
+      const result = detectIntentSync('点击登录按钮');
+      expect(result.requiresAgent).toBe(true);
+      expect(result.taskType).toBe('page-interaction');
+    });
+
+    it('should identify page interaction from "滚动" keyword', () => {
+      const result = detectIntentSync('滚动到页面底部');
+      expect(result.requiresAgent).toBe(true);
+      expect(result.taskType).toBe('page-interaction');
+    });
+
+    it('should identify screenshot from explicit screenshot phrases', () => {
+      const result = detectIntentSync('take a screenshot');
+      expect(result.requiresAgent).toBe(true);
+      expect(result.taskType).toBe('screenshot');
+    });
+  });
+
+  describe('Chat trigger patterns', () => {
+    it('should identify chat from question marks', () => {
+      const result = detectIntentSync('这是什么网站？');
+      expect(result.requiresAgent).toBe(false);
+      expect(result.taskType).toBe('chat');
+    });
+
+    it('should identify chat from "是什么" pattern', () => {
+      const result = detectIntentSync('这个按钮是做什么的');
+      expect(result.requiresAgent).toBe(false);
+      expect(result.taskType).toBe('chat');
+    });
+
+    it('should identify chat from "为什么" pattern', () => {
+      const result = detectIntentSync('为什么页面加载这么慢');
+      expect(result.requiresAgent).toBe(false);
+      expect(result.taskType).toBe('chat');
+    });
+
+    it('should identify chat from "如何" pattern', () => {
+      const result = detectIntentSync('如何使用这个功能');
+      expect(result.requiresAgent).toBe(false);
+      expect(result.taskType).toBe('chat');
+    });
+
+    it('should identify chat from "解释" pattern', () => {
+      const result = detectIntentSync('解释一下这个页面的结构');
+      expect(result.requiresAgent).toBe(false);
+      expect(result.taskType).toBe('chat');
+    });
+  });
+
+  describe('Mixed intent handling', () => {
+    it('should return mixed for multiple action intents', () => {
+      const result = detectIntentSync('截图并点击按钮');
+      expect(result.taskType).toBe('mixed');
+    });
+
+    it('should return mixed for screenshot + script', () => {
+      const result = detectIntentSync('先截图然后写个脚本');
+      expect(result.taskType).toBe('mixed');
+    });
+
+    it('should prioritize agent tasks when mixed with chat', () => {
+      const result = detectIntentSync('帮我截图，这是什么网站');
+      expect(result.requiresAgent).toBe(true);
+    });
+  });
 });

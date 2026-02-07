@@ -27,15 +27,3 @@ export interface ProviderApiKeys {
   anthropic?: string;
   openrouter?: string;
 }
-
-/** 存储键常量 */
-export const STORAGE_KEYS = {
-  PROVIDER_API_KEYS: 'provider_api_keys',
-  SELECTED_PROVIDER: 'selected_provider',
-  SELECTED_MODEL: 'selected_model',
-  MESSAGES: 'chat_messages',
-  DARK_MODE: 'dark_mode',
-} as const;
-
-/** 存储键类型 */
-export type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS];

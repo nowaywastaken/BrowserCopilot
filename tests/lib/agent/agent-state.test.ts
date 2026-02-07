@@ -13,6 +13,13 @@ import {
   setNextAction,
   completeTask,
   failTask,
+  createCompletedState,
+  createFailedState,
+  updateToPlanningPhase,
+  updateToExecutingPhase,
+  updateToEvaluatingPhase,
+  shouldContinue,
+  getPhaseDisplayName,
   type AgentPhase,
 } from '../../../src/lib/agent/agent-state';
 
@@ -278,6 +285,232 @@ describe('Agent State Management', () => {
       functions.forEach((fn) => {
         const newState = fn();
         expect(newState).not.toBe(originalState);
+      });
+    });
+  });
+
+  // ============================================================================
+  // Uncovered Functions Tests (lines 252-367)
+  // ============================================================================
+
+  describe('createCompletedState', () => {
+    it('creates a completed state with success result', () => {
+      const state = createInitialState('Test task');
+      const completedState = createCompletedState(state);
+
+      expect(completedState.phase).toBe('completed');
+      expect(completedState.result).toEqual({ success: true });
+      expect(completedState.completedAt).toBeDefined();
+    });
+
+    it('preserves the original state properties', () => {
+      const state = createInitialState('Test task');
+      const completedState = createCompletedState(state);
+
+      expect(completedState.id).toBe(state.id);
+      expect(completedState.task).toBe(state.task);
+      expect(completedState.iterations).toBe(state.iterations);
+    });
+
+    it('updates the updatedAt timestamp', () => {
+      const state = createInitialState('Test task');
+      const completedState = createCompletedState(state);
+
+      expect(completedState.updatedAt).toBeGreaterThanOrEqual(state.updatedAt);
+    });
+  });
+
+  describe('createFailedState', () => {
+    it('creates a failed state with error message', () => {
+      const state = createInitialState('Test task');
+      const errorMessage = 'Task failed due to timeout';
+      const failedState = createFailedState(state, errorMessage);
+
+      expect(failedState.phase).toBe('failed');
+      expect(failedState.error).toBe(errorMessage);
+      expect(failedState.completedAt).toBeDefined();
+    });
+
+    it('preserves the original state properties', () => {
+      const state = createInitialState('Test task');
+      state.iterations = 5;
+      const failedState = createFailedState(state, 'Error');
+
+      expect(failedState.id).toBe(state.id);
+      expect(failedState.task).toBe(state.task);
+      expect(failedState.iterations).toBe(5);
+    });
+  });
+
+  describe('updateToPlanningPhase', () => {
+    it('updates state to planning phase with thought', () => {
+      const state = createInitialState('Test task');
+      const thought = {
+        thought: 'I need to analyze the page first',
+        confidence: 0.9,
+        reasoning: 'Starting with page analysis',
+        timestamp: Date.now(),
+      };
+      const planningState = updateToPlanningPhase(state, thought);
+
+      expect(planningState.phase).toBe('planning');
+      expect(planningState.currentThought?.thought).toBe(thought.thought);
+      expect(planningState.currentThought?.confidence).toBe(0.9);
+      expect(planningState.currentThought?.reasoning).toBe(thought.reasoning);
+      expect(planningState.iterations).toBe(1);
+    });
+
+    it('uses default confidence when not provided', () => {
+      const state = createInitialState('Test task');
+      const planningState = updateToPlanningPhase(state, {
+        thought: 'Thinking...',
+        timestamp: Date.now(),
+      });
+
+      expect(planningState.currentThought?.confidence).toBe(0.8);
+    });
+
+    it('defaults empty reasoning to empty string', () => {
+      const state = createInitialState('Test task');
+      const planningState = updateToPlanningPhase(state, {
+        thought: 'Thinking...',
+        timestamp: Date.now(),
+      });
+
+      expect(planningState.currentThought?.reasoning).toBe('');
+    });
+  });
+
+  describe('updateToExecutingPhase', () => {
+    it('updates state to executing phase with action', () => {
+      const state = createInitialState('Test task');
+      const action = {
+        toolName: 'navigate',
+        arguments: { url: 'https://example.com' },
+      };
+      const executingState = updateToExecutingPhase(state, action);
+
+      expect(executingState.phase).toBe('executing');
+      expect(executingState.currentAction?.toolName).toBe('navigate');
+      expect(executingState.currentAction?.arguments).toEqual({ url: 'https://example.com' });
+    });
+
+    it('clears previous action if any', () => {
+      const state = createInitialState('Test task');
+      state.currentAction = { toolName: 'previous', arguments: {} };
+      const newState = updateToExecutingPhase(state, {
+        toolName: 'new',
+        arguments: { x: 1 },
+      });
+
+      expect(newState.currentAction?.toolName).toBe('new');
+    });
+  });
+
+  describe('updateToEvaluatingPhase', () => {
+    it('updates state to evaluating phase with tool record', () => {
+      const state = createInitialState('Test task');
+      const toolRecord = {
+        id: 'call-1',
+        toolName: 'click',
+        arguments: { selector: '#button' },
+        success: true,
+        timestamp: Date.now(),
+        duration: 100,
+      };
+      const evaluatingState = updateToEvaluatingPhase(state, toolRecord);
+
+      expect(evaluatingState.phase).toBe('evaluating');
+      expect(evaluatingState.currentAction).toBeNull();
+      expect(evaluatingState.toolCalls.length).toBe(1);
+      expect(evaluatingState.toolCalls[0].toolName).toBe('click');
+    });
+
+    it('appends to existing tool calls', () => {
+      const state = createInitialState('Test task');
+      const stateWithCall = addToolCall(state, {
+        toolName: 'navigate',
+        arguments: { url: 'https://example.com' },
+        success: true,
+      });
+      const toolRecord = {
+        id: 'call-2',
+        toolName: 'click',
+        arguments: { selector: '#button' },
+        success: true,
+        timestamp: Date.now(),
+        duration: 100,
+      };
+      const evaluatingState = updateToEvaluatingPhase(stateWithCall, toolRecord);
+
+      expect(evaluatingState.toolCalls.length).toBe(2);
+    });
+  });
+
+  describe('shouldContinue', () => {
+    it('returns true for non-terminal phases with iterations remaining', () => {
+      const state = createInitialState('Test task');
+
+      expect(shouldContinue(state, 50)).toBe(true);
+    });
+
+    it('returns false for completed phase', () => {
+      const state = createInitialState('Test task');
+      state.phase = 'completed';
+
+      expect(shouldContinue(state, 50)).toBe(false);
+    });
+
+    it('returns false for failed phase', () => {
+      const state = createInitialState('Test task');
+      state.phase = 'failed';
+
+      expect(shouldContinue(state, 50)).toBe(false);
+    });
+
+    it('returns false when iterations reach maxIterations', () => {
+      const state = createInitialState('Test task');
+      state.iterations = 50;
+
+      expect(shouldContinue(state, 50)).toBe(false);
+    });
+
+    it('returns true when iterations are below maxIterations', () => {
+      const state = createInitialState('Test task');
+      state.iterations = 49;
+
+      expect(shouldContinue(state, 50)).toBe(true);
+    });
+
+    it('handles all non-terminal phases', () => {
+      const nonTerminalPhases: AgentPhase[] = ['idle', 'planning', 'executing', 'evaluating'];
+
+      nonTerminalPhases.forEach((phase) => {
+        const state = createInitialState('Test task');
+        state.phase = phase;
+
+        expect(shouldContinue(state, 50)).toBe(true);
+      });
+    });
+  });
+
+  describe('getPhaseDisplayName', () => {
+    it('returns Chinese display names for all phases', () => {
+      expect(getPhaseDisplayName('idle')).toBe('等待任务');
+      expect(getPhaseDisplayName('planning')).toBe('规划中');
+      expect(getPhaseDisplayName('executing')).toBe('执行中');
+      expect(getPhaseDisplayName('evaluating')).toBe('评估中');
+      expect(getPhaseDisplayName('completed')).toBe('已完成');
+      expect(getPhaseDisplayName('failed')).toBe('失败');
+    });
+
+    it('handles all valid AgentPhase values', () => {
+      const phases: AgentPhase[] = ['idle', 'planning', 'executing', 'evaluating', 'completed', 'failed'];
+
+      phases.forEach((phase) => {
+        const displayName = getPhaseDisplayName(phase);
+        expect(typeof displayName).toBe('string');
+        expect(displayName.length).toBeGreaterThan(0);
       });
     });
   });

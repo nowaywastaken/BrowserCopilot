@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import type {
   AgentState,
+} from '../../../src/lib/agent/agent-state';
+import type {
   ToolDefinition,
   ToolResult,
   ToolContext,
   ToolExecutor,
-} from './types';
+} from '../../../src/lib/agent/tool-executor';
 
 describe('Agent Types', () => {
   describe('AgentState', () => {

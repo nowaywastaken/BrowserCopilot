@@ -14,7 +14,6 @@
 import { ChatService } from '../lib/services/chat-service';
 import {
   AgentState,
-  AgentPhase,
   ToolCallRecord,
   createInitialState,
   createCompletedState,
@@ -288,7 +287,7 @@ export class AgentCore {
       }
 
       // Check if max iterations reached
-      if (!isTerminalPhase(this.state.phase)) {
+      if (this.state.phase !== 'completed' && this.state.phase !== 'failed') {
         this.state = createFailedState(
           this.state,
           `Max iterations (${this.config.maxIterations}) reached without completion`
@@ -714,13 +713,6 @@ export class AgentCore {
 // ============================================================================
 // Utility Functions
 // ============================================================================
-
-/**
- * Check if state is a terminal state
- */
-function isTerminalPhase(phase: AgentPhase): boolean {
-  return phase === 'completed' || phase === 'failed';
-}
 
 /**
  * Create and run an agent with default configuration

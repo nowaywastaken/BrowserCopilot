@@ -12,8 +12,8 @@ import {
   isValidProvider,
   isValidModel,
   type ProviderId,
-  type AIModel,
 } from '../../../src/lib/providers/config';
+import type { AIModel } from '../../../src/lib/types/provider';
 
 describe('Provider Config', () => {
   describe('PROVIDERS', () => {

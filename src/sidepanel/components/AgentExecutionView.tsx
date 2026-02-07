@@ -495,5 +495,3 @@ export const AgentExecutionView = React.memo(function AgentExecutionView({
     </div>
   );
 });
-
-export default AgentExecutionView;
